@@ -27,3 +27,15 @@ The dataset (polygon shape file) describes the Falkland Islands boundaries updat
 Falkland Islands Conservation Zones defined for fisheries activities. Two zones were identified and classified as inner (FICZ) and outer (FOCZ) conservation zones. They are currently in use and officially recognised by the Falkland Islands Governement and international laws.
 
 <https://dataportal.saeri.org/dataset/falkland-islands-conservation-zones>
+
+## Falkland Islands 3 nautical miles no fisheries zones
+
+Three nautical miles area around the Falkland Island delimiting a no fisheries zone.
+
+<https://dataportal.saeri.org/dataset/falkland-islands-3-nautical-miles-no-fisheries-zones>
+
+## Gebco bathymetry one minute arc grid
+
+Gebco a global one arc-minute grid. Released: 2003, updated: 2008 On behalf of GEBCO, the GEBCO one arc-minute grid is available to download from the British Oceanographic Data Centre (BODC).
+
+<https://dataportal.saeri.org/dataset/gebco-bathymetry-one-minute-arc-grid>
