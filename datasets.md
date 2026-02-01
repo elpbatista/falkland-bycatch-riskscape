@@ -15,3 +15,15 @@ Since about 2008 bird abundance and interaction data have been collected and sea
 <https://dataportal.saeri.org/dataset/falkland-islands-fisheries-observer-database>
 
 Download link not available publicly. Please contact SAERI for access.
+
+## Falkland Islands boundaries
+
+The dataset (polygon shape file) describes the Falkland Islands boundaries updated in 2017.
+
+<https://dataportal.saeri.org/dataset/falkland-islands-boundaries>
+
+## Falkland Islands Conservation Zones
+
+Falkland Islands Conservation Zones defined for fisheries activities. Two zones were identified and classified as inner (FICZ) and outer (FOCZ) conservation zones. They are currently in use and officially recognised by the Falkland Islands Governement and international laws.
+
+<https://dataportal.saeri.org/dataset/falkland-islands-conservation-zones>
