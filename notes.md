@@ -64,3 +64,30 @@ Future refinement: Once risk signal stability is established and spatial smoothn
 Licence squares will remain the reporting and management unit, regardless of internal grid geometry.
 
 Grid shape is intentionally decoupled from risk logic to allow this switch without refactoring core model
+
+## What “fishing effort” actually means
+
+At daily resolution, effort can mean several things:
+
+- Vessel presence
+- Vessel time spent
+- Number of operations (sets, hauls, nights)
+- AIS-derived activity density
+- Observer-reported effort units
+
+For bycatch risk, effort is not just a covariate; it’s the exposure term.
+
+No effort → no bycatch risk, no matter how good the habitat looks.
+
+### Time-weighted fishing effort per cell per day
+
+Specifically: **Total fishing hours per ~5 km cell per day**. This is my exposure layer.
+
+### The risk logic
+
+`Risk = Exposure × Susceptibility`
+
+Where:
+
+- Exposure = fishing effort (hours)
+- Susceptibility = environmental + biological risk
