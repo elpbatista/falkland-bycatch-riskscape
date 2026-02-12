@@ -83,6 +83,10 @@ No effort → no bycatch risk, no matter how good the habitat looks.
 
 Specifically: **Total fishing hours per ~5 km cell per day**. This is my exposure layer.
 
+`effort_hours[cell, day] = Σ Δt`
+
+> Time-weighted fishing effort (hours) per ~5 km equal-area grid cell per day, derived from AIS/VMS fishing-activity classifications.
+
 ### The risk logic
 
 `Risk = Exposure × Susceptibility`
@@ -91,3 +95,42 @@ Where:
 
 - Exposure = fishing effort (hours)
 - Susceptibility = environmental + biological risk
+
+> Daily bycatch risk is defined as realized risk, conditioned on fishing effort; latent risk surfaces may be computed separately for exploratory or forecasting purposes.
+
+### Risk decomposition
+
+> Bycatch risk is decomposed into a latent (hazard) component driven by environmental and biological conditions, and a realized (impact) component obtained by conditioning latent risk on fishing effort.
+
+`realized_risk = latent_risk × effort`
+
+**Latent risk (hazard):** The environmentally and biologically driven potential for bycatch to occur in a given place and day, independent of fishing effort.
+
+**Realized risk (impact):** The bycatch risk actually expressed on a given day, conditioned on fishing effort.
+
+```Text
+Environmental + biological data
+          ↓
+Latent risk (cell, day)
+          ↓
+   × Fishing effort (observed or hypothetical)
+          ↓
+Realized risk (cell, day)
+          ↓
+Aggregate to licence squares
+```
+
+Forecasts operate on the latent layer while operations and reporting operate on realized risk
+
+### How to handle effort in a forecasting context
+
+Once latent risk exists, effort becomes modular:
+
+- Observed effort → retrospective analysis
+- Smoothed effort → near-term nowcasts
+- Hypothetical effort → “what-if” scenarios
+- Zero effort → protected area simulations
+
+## Memory notes
+
+> For production pipelines, use PyArrow or DuckDB with explicit schema and batch sizing. Sort by space (Hilbert curve) during the write to maximize predicate pushdown later.
