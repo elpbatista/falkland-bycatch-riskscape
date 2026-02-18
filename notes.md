@@ -242,3 +242,22 @@ Tracking → Evaluates whether species use high-probability regimes
 - Phase strategy:
   - Phase 1: Continuous gradients + nonlinear additive model
   - Phase 2: Nonlinear embedding only if diagnostics justify
+
+> Adding the species layer modularly allows forecasting different species depending on tracking data availability, without altering the core seascape-driven latent hazard framework.
+
+## Five-Layer System
+
+1. Seascapes (Physical Layer)  
+   Environment → daily gradients (5 km grid)
+
+2. Species SDM (Ecological Layer)  
+   Seascape gradients + tracking data → P(species present)
+
+3. Latent Hazard (Interaction Layer)  
+   Seascape gradients + bycatch observations → P(bycatch-prone)
+
+4. Species Latent Risk  
+   P(bycatch-prone) × P(species)
+
+5. Realized Impact  
+   P(bycatch-prone) × P(species) × Effort
