@@ -109,15 +109,37 @@ Where:
 **Realized risk (impact):** The bycatch risk actually expressed on a given day, conditioned on fishing effort.
 
 ```Text
-Environmental + biological data
-          ↓
-Latent risk (cell, day)
-          ↓
-   × Fishing effort (observed or hypothetical)
-          ↓
-Realized risk (cell, day)
-          ↓
-Aggregate to licence squares
+Meteorology + Satellite
+        ↓
+Continuous Seascape Gradients (daily, 5 km)
+        ↓
+Latent Hazard Model (bycatch ~ seascapes)
+        ↓
+Latent Hazard Surface (cell × day)
+        ↓
+Realized Risk = Hazard × Effort
+        ↓
+Licence Square Aggregation
+
+---
+
+Tracking Data
+        ↓
+Behavior relative to Seascapes and Hazard
+
+---
+
+Environment → Seascapes
+        ↓
+Latent Hazard (environment-only)
+        ↓
+Species SDM (environment-only)
+        ↓
+Species Presence Probability
+
+Species Latent Risk = Hazard × Species Presence
+
+Species Realized Impact = Species Latent Risk × Effort
 ```
 
 Forecasts operate on the latent layer while operations and reporting operate on realized risk
@@ -131,6 +153,92 @@ Once latent risk exists, effort becomes modular:
 - Hypothetical effort → “what-if” scenarios
 - Zero effort → protected area simulations
 
+### What latent risk from tracking should represent
+
+Tracking-derived hazard should answer:
+
+> How likely is the species to be in this cell on this day?
+
 ## Memory notes
 
 > For production pipelines, use PyArrow or DuckDB with explicit schema and batch sizing. Sort by space (Hilbert curve) during the write to maximize predicate pushdown later.
+
+**GAM** = Generalized Additive Model
+
+It is a statistical model that allows nonlinear relationships between predictors (seascape gradients) and a response (latent bycatch hazard), while remaining interpretable.
+
+A GAM is:
+
+A nonlinear regression model that estimates smooth relationships between environmental gradients and latent bycatch hazard, making it ideal for continuous seascape-driven risk modeling on the daily 5 km grid.
+
+---
+
+**The probability that a cell-day under a given environmental regime is prone to bycatch-generating conditions**.
+
+## Conceptual Architecture
+
+Environment → Seascape gradients.  
+Seascapes → Probability of bycatch-prone regime.  
+Probability → Risk category (Low/Moderate/High).  
+Effort → Scales impact, not hazard.  
+
+Tracking → Evaluates whether species use high-probability regimes
+
+---
+
+## Falklands Daily Seascape-Driven Bycatch System — Summary
+
+- Temporal resolution: Daily (UTC)
+
+- Internal modeling grid:
+  - ~5 km equal-area cells
+  - Square cells (initial implementation)
+  - Hexagonal cells (optional refinement)
+  - Grid geometry modular and replaceable
+
+- Reporting unit:
+  - Licence squares (aggregation only)
+
+- Core structure:
+  - Environment → Seascapes → Latent Risk → Realized Impact
+
+- Seascape representation:
+  - Continuous environmental gradients
+  - No discrete classification in core forecast model
+  - Nonlinear embedding optional (Phase 2)
+
+- Environmental inputs (cell × day):
+  - Wind metrics
+  - SST
+  - SST gradient
+  - Chlorophyll
+  - Chlorophyll gradient
+  - SSH (optional)
+
+- Latent bycatch risk:
+  - Probability surface
+  - Independent of fishing effort
+  - Modeled as: `logit(P) = f(seascape gradients)`
+
+- Risk output:
+  - Continuous probability (0–1)
+  - Categorized into `Low / Moderate / High` after modeling
+
+- Fishing effort:
+  - Not used in latent model
+  - Used only to compute realized impact
+  - `Realized impact = latent probability × effort`
+
+- Tracking data:
+  - Not used to define hazard
+  - Used to analyze species behavior relative to seascapes and hazard
+
+- Forecasting workflow:
+  - Forecast environmental gradients
+  - Predict latent probability
+  - Categorize risk
+  - Optionally scale by projected effort
+
+- Phase strategy:
+  - Phase 1: Continuous gradients + nonlinear additive model
+  - Phase 2: Nonlinear embedding only if diagnostics justify
