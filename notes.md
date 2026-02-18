@@ -259,5 +259,5 @@ Tracking → Evaluates whether species use high-probability regimes
 4. Species Latent Risk  
    P(bycatch-prone) × P(species)
 
-5. Realized Impact  
+5. Realized Impact (Operational Layer)  
    P(bycatch-prone) × P(species) × Effort
