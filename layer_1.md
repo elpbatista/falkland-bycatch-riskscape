@@ -2,7 +2,8 @@
 
 Strictly following **Kavanaugh et al. (2014)**
 
-> Continuous implementation, daily, 5 km equal-area grid.
+> Continuous implementation, daily, 5 km equal-area grid.  
+> 2014–2023 (10-year) training dataset, with 2024–2025 (2-year) forecast period.
 
 ## Data Sources
 
