@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 import h3
 
 
-CONFIG_FILE = "config/config.yaml"
+CONFIG_FILE = "config.yaml"
 
 
 # ------------------------------------------------------------------
@@ -63,16 +63,16 @@ polygon = {
 # Generate H3 grid
 # ------------------------------------------------------------------
 
-hex_ids = h3.polyfill_geojson(polygon, resolution)
+shape = h3.geo_to_h3shape(polygon)
+hex_ids = h3.h3shape_to_cells(shape, resolution)
 
 records = []
-
 for h in hex_ids:
 
-    boundary = h3.h3_to_geo_boundary(h, geo_json=True)
-    poly = Polygon(boundary)
-
-    lat, lon = h3.h3_to_geo(h)
+    # new API names
+    boundary = h3.cell_to_boundary(h)
+    poly = Polygon([(lng, lat) for lat, lng in boundary])
+    lat, lon = h3.cell_to_latlng(h)
 
     records.append({
         "hex_id": h,
