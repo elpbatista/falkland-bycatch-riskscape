@@ -2,6 +2,21 @@
 
 Layer 0 defines the spatial foundation of the bycatch riskscape system. It establishes the study region, spatial indexing scheme, and the reproducible grid generation process that all subsequent layers will use.
 
+## Architecture
+
+```text
+config.yaml
+     │
+     ▼
+scripts/build_grid.py
+     │
+     ▼
+src/riskscape/grid/h3_grid.py
+     │
+     ▼
+data/grids/h3_res6_falkland_islands.*
+```
+
 ## Study Region
 
 The study region corresponds to the Falkland Islands area and is defined in the project configuration.
