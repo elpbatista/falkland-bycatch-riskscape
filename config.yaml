@@ -22,11 +22,11 @@ time:
 
 
 paths:
-  data_root: data
-  raw: data/raw
-  processed: data/processed
-  grids: data/grids
-
+  data: "data"
+  raw: "data/raw"
+  processed: "data/processed"
+  grids: "data/grids"
+  logs: "logs"
 
 datasets:
 
