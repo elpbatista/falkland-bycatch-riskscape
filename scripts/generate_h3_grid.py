@@ -16,6 +16,8 @@ from riskscape.config import cfg, paths
 bbox = cfg["region"]["bbox"]
 buffer_km = cfg["region"]["buffer_km"]
 resolution = cfg["grid"]["resolution"]
+region_name = cfg["region"]["name"]
+crs = cfg["region"]["crs"]
 
 xmin = bbox["xmin"]
 ymin = bbox["ymin"]
@@ -81,12 +83,12 @@ for h in hex_ids:
 # Save grid
 # ------------------------------------------------------------------
 
-gdf = gpd.GeoDataFrame(records, crs="EPSG:4326")
+gdf = gpd.GeoDataFrame(records, crs=crs)
 
 output_dir = paths["grids"]
 output_dir.mkdir(parents=True, exist_ok=True)
 
-output_file = output_dir / f"h3_res{resolution}_falklands.geojson"
+output_file = output_dir / f"h3_res{resolution}_{region_name}.geojson"
 
 gdf.to_file(output_file, driver="GeoJSON")
 
