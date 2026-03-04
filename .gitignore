@@ -416,3 +416,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+###### Added by PB on 2024-06-17 ######
+
+data/
+logs/

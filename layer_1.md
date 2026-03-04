@@ -10,6 +10,14 @@ Strictly following **Kavanaugh et al. (2014)**
 > Resolution mismatch is expected.  
 > All variables will be harmonized to 5 km grid.
 
+```Text
+data/
+   raw/
+      sst/
+      chlorophyll/
+      adt/
+```
+
 ### Sea Surface Temperature (SST)
 
 Temperature of the ocean’s uppermost layer, representing the thermal state of the surface ocean and a key indicator of water mass structure and stratification.
