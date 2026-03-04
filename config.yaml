@@ -34,17 +34,21 @@ datasets:
     provider: podaac
     product: MUR-JPL-L4-GLOB-v4.1
     variable: analysed_sst
-    base_url: https://podaac-opendap.jpl.nasa.gov/opendap/allData/ghrsst/data/GDS2/L4/GLOB/JPL/MUR25
+    resolution: 0.01deg
 
   chlorophyll:
     provider: nasa_oceancolor
     product: VIIRS_SNPP_L3m_DAY_CHL
     variable: chlor_a
+    transform: log10
+    resolution: 4km
 
   ssh:
     provider: copernicus
     product: SEALEVEL_GLO_PHY_L4_MY_008_047
     variable: adt
+    resolution: 0.25deg
+    
 
 
 layer1:
