@@ -10,24 +10,16 @@ from riskscape.config import cfg, paths
 
 
 # ------------------------------------------------------------------
-# Load configuration
+# Convert buffer from km to degrees
 # ------------------------------------------------------------------
 
 bbox = cfg["region"]["bbox"]
 buffer_km = cfg["region"]["buffer_km"]
-resolution = cfg["grid"]["resolution"]
-region_name = cfg["region"]["name"]
-crs = cfg["region"]["crs"]
 
 xmin = bbox["xmin"]
 ymin = bbox["ymin"]
 xmax = bbox["xmax"]
 ymax = bbox["ymax"]
-
-
-# ------------------------------------------------------------------
-# Convert buffer from km to degrees
-# ------------------------------------------------------------------
 
 mid_lat = (ymin + ymax) / 2
 
@@ -60,6 +52,8 @@ polygon = {
 # Generate H3 grid
 # ------------------------------------------------------------------
 
+resolution = cfg["grid"]["resolution"]
+
 shape = h3.geo_to_h3shape(polygon)
 hex_ids = h3.h3shape_to_cells(shape, resolution)
 
@@ -82,6 +76,9 @@ for h in hex_ids:
 # ------------------------------------------------------------------
 # Save grid
 # ------------------------------------------------------------------
+
+crs = cfg["region"]["crs"]
+region_name = cfg["region"]["name"]
 
 gdf = gpd.GeoDataFrame(records, crs=crs)
 
