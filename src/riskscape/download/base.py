@@ -1,6 +1,7 @@
 from pathlib import Path
 import datetime
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 from riskscape.config import cfg, paths
 
@@ -34,6 +35,8 @@ def run_downloader(dataset_name, build_url, build_filename):
     raw_dir = paths["raw"] / dataset_name
     raw_dir.mkdir(parents=True, exist_ok=True)
 
+    tasks = []
+
     for date in daterange(start, end):
 
         filename = build_filename(date)
@@ -41,6 +44,8 @@ def run_downloader(dataset_name, build_url, build_filename):
 
         outfile = raw_dir / filename
 
-        print("Downloading:", filename)
+        tasks.append((url, outfile))
 
-        download_file(url, outfile)
+    # parallel downloads
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        executor.map(lambda t: download_file(*t), tasks)
