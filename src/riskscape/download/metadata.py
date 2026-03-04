@@ -1,23 +1,13 @@
-"""
-Dataset metadata utilities.
-"""
+"""Dataset metadata utilities."""
 
-import json
 import datetime
+import json
 
 from riskscape.config import cfg
 
 
 def write_dataset_metadata(dataset_name, dataset_cfg, output_dir):
-    """
-    Write dataset metadata file.
-
-    Parameters
-    ----------
-    dataset_name : str
-    dataset_cfg : dict
-    output_dir : Path
-    """
+    """Write metadata.json describing the downloaded dataset."""
 
     metadata = {
         "dataset": dataset_name,
@@ -27,12 +17,12 @@ def write_dataset_metadata(dataset_name, dataset_cfg, output_dir):
         "download_date": datetime.date.today().isoformat(),
         "time_range": {
             "start": cfg["time"]["start"],
-            "end": cfg["time"]["end"]
+            "end": cfg["time"]["end"],
         },
-        "base_url": dataset_cfg.get("base_url")
+        "base_url": dataset_cfg.get("base_url"),
     }
 
     metadata_file = output_dir / "metadata.json"
 
-    with open(metadata_file, "w") as f:
+    with open(metadata_file, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)

@@ -1,17 +1,14 @@
-from pathlib import Path
+"""Generate an H3 grid for the configured region."""
+
 import math
+from pathlib import Path
 
 import geopandas as gpd
-from shapely.geometry import Polygon
-
 import h3
+from shapely.geometry import Polygon
 
 from riskscape.config import cfg, paths
 
-
-# ------------------------------------------------------------------
-# Convert buffer from km to degrees
-# ------------------------------------------------------------------
 
 bbox = cfg["region"]["bbox"]
 buffer_km = cfg["region"]["buffer_km"]
@@ -32,10 +29,6 @@ ymin_b = ymin - dlat
 ymax_b = ymax + dlat
 
 
-# ------------------------------------------------------------------
-# Create buffered polygon
-# ------------------------------------------------------------------
-
 polygon = {
     "type": "Polygon",
     "coordinates": [[
@@ -43,14 +36,10 @@ polygon = {
         [xmax_b, ymin_b],
         [xmax_b, ymax_b],
         [xmin_b, ymax_b],
-        [xmin_b, ymin_b]
-    ]]
+        [xmin_b, ymin_b],
+    ]],
 }
 
-
-# ------------------------------------------------------------------
-# Generate H3 grid
-# ------------------------------------------------------------------
 
 resolution = cfg["grid"]["resolution"]
 
@@ -59,23 +48,18 @@ hex_ids = h3.h3shape_to_cells(shape, resolution)
 
 records = []
 
-for h in hex_ids:
-
-    boundary = h3.cell_to_boundary(h)
-    poly = Polygon([(lng, lat) for lat, lng in boundary])
-    lat, lon = h3.cell_to_latlng(h)
+for cell_id in hex_ids:
+    boundary = h3.cell_to_boundary(cell_id)
+    geometry = Polygon([(lng, lat) for lat, lng in boundary])
+    lat, lon = h3.cell_to_latlng(cell_id)
 
     records.append({
-        "hex_id": h,
+        "hex_id": cell_id,
         "centroid_lat": lat,
         "centroid_lon": lon,
-        "geometry": poly
+        "geometry": geometry,
     })
 
-
-# ------------------------------------------------------------------
-# Save grid
-# ------------------------------------------------------------------
 
 crs = cfg["region"]["crs"]
 region_name = cfg["region"]["name"]
@@ -89,5 +73,5 @@ output_file = output_dir / f"h3_res{resolution}_{region_name}.geojson"
 
 gdf.to_file(output_file, driver="GeoJSON")
 
-print("Grid saved to:", output_file)
-print("Number of hex cells:", len(gdf))
+print("Grid saved:", output_file)
+print("Hex cells:", len(gdf))
