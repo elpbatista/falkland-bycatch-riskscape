@@ -13,4 +13,6 @@ region:
 grid:
   system: H3
   resolution: 6
-  clip_to_study_area: true
+
+paths:
+  grids: data/grids
