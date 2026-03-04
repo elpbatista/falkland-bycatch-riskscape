@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 import h3
 
 
-CONFIG_FILE = "config.yaml"
+CONFIG_FILE = "../config.yaml"
 
 
 # ------------------------------------------------------------------
