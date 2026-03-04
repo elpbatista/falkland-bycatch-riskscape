@@ -65,12 +65,20 @@ def build_h3_grid():
     output_dir = paths["grids"]
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    region = cfg["region"]["name"]
-    output_file = output_dir / f"h3_res{resolution}_{region}.geojson"
+    region_name = cfg["region"]["name"]
+    base_name = f"h3_res{resolution}_{region_name}"
 
-    gdf.to_file(output_file, driver="GeoJSON")
+    geojson_file = output_dir / f"{base_name}.geojson"
+    gpkg_file = output_dir / f"{base_name}.gpkg"
+    parquet_file = output_dir / f"{base_name}.parquet"
 
-    print("Grid saved:", output_file)
+    # write all formats; parquet uses pyarrow for compatibility
+    gdf.to_file(geojson_file, driver="GeoJSON")
+    gdf.to_file(gpkg_file, driver="GPKG")
+    gdf.to_parquet(parquet_file, engine="pyarrow", index=False)
+
+    for fname in (geojson_file, parquet_file, gpkg_file):
+        print("Grid saved:", fname)
     print("Hex cells:", len(gdf))
 
 
