@@ -10,9 +10,50 @@ region:
 
   buffer_km: 50
 
+
 grid:
   system: H3
   resolution: 6
 
+
+time:
+  start: "2014-01-01"
+  end: "2023-12-31"
+
+
 paths:
+  data_root: data
+  raw: data/raw
+  processed: data/processed
   grids: data/grids
+
+
+datasets:
+
+  sst:
+    provider: podaac
+    product: MUR-JPL-L4-GLOB-v4.1
+    variable: analysed_sst
+    base_url: https://podaac-opendap.jpl.nasa.gov/opendap/allData/ghrsst/data/GDS2/L4/GLOB/JPL/MUR25
+
+  chlorophyll:
+    provider: nasa_oceancolor
+    product: VIIRS_SNPP_L3m_DAY_CHL
+    variable: chlor_a
+
+  ssh:
+    provider: copernicus
+    product: SEALEVEL_GLO_PHY_L4_MY_008_047
+    variable: adt
+
+
+layer1:
+  variables:
+    - sst
+    - chlorophyll
+    - ssh
+
+  transforms:
+    chlorophyll: log10
+
+  standardize: true
