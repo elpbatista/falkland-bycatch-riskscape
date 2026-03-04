@@ -1,5 +1,4 @@
 from pathlib import Path
-import yaml
 import math
 
 import geopandas as gpd
@@ -7,16 +6,12 @@ from shapely.geometry import Polygon
 
 import h3
 
-
-CONFIG_FILE = "../config.yaml"
+from riskscape.config import cfg, paths
 
 
 # ------------------------------------------------------------------
 # Load configuration
 # ------------------------------------------------------------------
-
-with open(CONFIG_FILE) as f:
-    cfg = yaml.safe_load(f)
 
 bbox = cfg["region"]["bbox"]
 buffer_km = cfg["region"]["buffer_km"]
@@ -67,9 +62,9 @@ shape = h3.geo_to_h3shape(polygon)
 hex_ids = h3.h3shape_to_cells(shape, resolution)
 
 records = []
+
 for h in hex_ids:
 
-    # new API names
     boundary = h3.cell_to_boundary(h)
     poly = Polygon([(lng, lat) for lat, lng in boundary])
     lat, lon = h3.cell_to_latlng(h)
@@ -88,7 +83,7 @@ for h in hex_ids:
 
 gdf = gpd.GeoDataFrame(records, crs="EPSG:4326")
 
-output_dir = Path(cfg["paths"]["grids"])
+output_dir = paths["grids"]
 output_dir.mkdir(parents=True, exist_ok=True)
 
 output_file = output_dir / f"h3_res{resolution}_falklands.geojson"
