@@ -132,3 +132,13 @@ Meteorological variables that affect bird movement and distribution (e.g., wind 
 - `P_hazard(x,t) = g(G(x,t), bycatch_obs)`  
 - `R_species(x,t) = P_hazard(x,t) * P_species(x,t)`  
 - `Impact(x,t) = P_hazard(x,t) * P_species(x,t) * E(x,t)`
+
+## Recommendations
+
+1. Standardize before gradients.
+2. Smooth before gradients (3–7 day tests).
+3. Wind as u/v components (Layer 2).
+4. Add temporal lags for SDM (Layer 2).
+5. Keep SDM vs hazard training datasets separate.
+6. Add gear type to hazard model if available.
+7. Treat P_species, P_hazard, and Impact as distinct outputs.
