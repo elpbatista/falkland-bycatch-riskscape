@@ -1,0 +1,16 @@
+region:
+  name: falkland_islands
+  crs: EPSG:4326
+
+  bbox:
+    xmin: -64
+    ymin: -57
+    xmax: -51
+    ymax: -47
+
+  buffer_km: 50
+
+grid:
+  system: H3
+  resolution: 6
+  clip_to_study_area: true
