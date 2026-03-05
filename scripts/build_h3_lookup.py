@@ -1,17 +1,17 @@
-"""Build raster -> H3 lookup tables for fast extraction."""
+"""Build raster -> H3 lookup tables using direct H3 indexing."""
 
 from pathlib import Path
 
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from shapely.geometry import Point
+import h3
 
-from riskscape.config import cfg, paths
+from riskscape.config import cfg
 
 
-def detect_coords(ds: xr.Dataset) -> tuple[str, str]:
+def detect_coords(ds):
+    """Detect latitude and longitude coordinate names."""
     lat_candidates = ("lat", "latitude")
     lon_candidates = ("lon", "longitude")
 
@@ -19,66 +19,80 @@ def detect_coords(ds: xr.Dataset) -> tuple[str, str]:
     lon = next((c for c in lon_candidates if c in ds.coords), None)
 
     if lat is None or lon is None:
-        raise KeyError(f"lat/lon coords not found. coords={list(ds.coords)}")
+        raise KeyError(f"lat/lon coordinates not found. coords={list(ds.coords)}")
 
     return lat, lon
 
 
-def grid_path_from_cfg() -> Path:
-    region = cfg["region"]["name"]
-    res = int(cfg["grid"]["resolution"])
-    return paths["grids"] / f"h3_res{res}_{region}.parquet"
+def grid_resolution():
+    """Return H3 resolution from config."""
+    return int(cfg["grid"]["resolution"])
 
 
-def lookup_dir_from_cfg() -> Path:
-    return paths.get("lookups", paths["data"] / "lookups")
+def raw_dir():
+    return Path(cfg["paths"]["raw"])
 
 
-def build_lookup(dataset_name: str) -> None:
-    dataset_dir = paths["raw"] / dataset_name
+def lookup_dir():
+    path = Path(cfg["paths"]["data"]) / "lookups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def build_lookup(dataset_name):
+    """Create pixel -> H3 lookup table."""
+
+    dataset_dir = raw_dir() / dataset_name
     files = sorted(dataset_dir.glob("*.nc"))
 
     if not files:
-        print(f"Skipping {dataset_name}: no .nc files in {dataset_dir}")
+        print(f"Skipping {dataset_name}: no .nc files")
         return
 
-    ds0 = xr.open_dataset(files[0])
-    lat_name, lon_name = detect_coords(ds0)
+    print(f"Building lookup for {dataset_name}")
 
-    lats = ds0[lat_name].values
-    lons = ds0[lon_name].values
-    ds0.close()
+    ds = xr.open_dataset(files[0])
+
+    lat_name, lon_name = detect_coords(ds)
+
+    lats = ds[lat_name].values
+    lons = ds[lon_name].values
+
+    ds.close()
 
     lon_grid, lat_grid = np.meshgrid(lons, lats)
-    lon_flat = lon_grid.ravel()
-    lat_flat = lat_grid.ravel()
 
-    pixels = gpd.GeoDataFrame(
+    lat_flat = lat_grid.ravel()
+    lon_flat = lon_grid.ravel()
+
+    resolution = grid_resolution()
+
+    h3_ids = [
+        h3.latlng_to_cell(lat, lon, resolution)
+        for lat, lon in zip(lat_flat, lon_flat)
+    ]
+
+    lookup = pd.DataFrame(
         {
-            "pixel": np.arange(lat_flat.size, dtype=np.int64),
-            "geometry": [Point(xy) for xy in zip(lon_flat, lat_flat)],
-        },
-        crs="EPSG:4326",
+            "pixel": np.arange(len(h3_ids), dtype=np.int64),
+            "h3": h3_ids,
+        }
     )
 
-    grid = gpd.read_parquet(grid_path_from_cfg())[["id", "geometry"]]
+    out_file = lookup_dir() / f"{dataset_name}_lookup.parquet"
 
-    joined = gpd.sjoin(pixels, grid, how="left", predicate="within")
-    lookup = joined[["pixel", "id"]].rename(columns={"id": "h3"})
-
-    out_dir = lookup_dir_from_cfg()
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    out_file = out_dir / f"{dataset_name}_lookup.parquet"
     lookup.to_parquet(out_file, index=False)
 
-    mapped = int(lookup["h3"].notna().sum())
-    print(f"{dataset_name}: mapped_pixels = {mapped}")
+    print(f"Lookup saved: {out_file}")
+    print(f"Pixels processed: {len(lookup)}")
 
 
-def main() -> None:
-    for name in cfg["datasets"].keys():
-        build_lookup(name)
+def main():
+
+    datasets = cfg["datasets"].keys()
+
+    for dataset in datasets:
+        build_lookup(dataset)
 
 
 if __name__ == "__main__":
