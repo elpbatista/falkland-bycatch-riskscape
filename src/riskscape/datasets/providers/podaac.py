@@ -1,8 +1,7 @@
 """
 PO.DAAC MUR SST downloader.
 
-Downloads daily global files via HTTPS (Earthdata auth) and crops locally
-to the buffered study area from config.
+Download daily SST files and crop them to the buffered region.
 """
 
 from __future__ import annotations
@@ -25,7 +24,9 @@ BASE_URL = (
 )
 
 
-def _buffered_bbox_from_cfg() -> tuple[float, float, float, float]:
+def buffered_bbox():
+    """Return buffered bounding box from config."""
+
     bbox = cfg["region"]["bbox"]
     buffer_km = float(cfg["region"]["buffer_km"])
 
@@ -42,7 +43,9 @@ def _buffered_bbox_from_cfg() -> tuple[float, float, float, float]:
     return xmin - dlon, ymin - dlat, xmax + dlon, ymax + dlat
 
 
-def _dates(start: str, end: str):
+def dates(start, end):
+    """Generate dates between start and end."""
+
     d0 = datetime.fromisoformat(start).date()
     d1 = datetime.fromisoformat(end).date()
 
@@ -52,7 +55,9 @@ def _dates(start: str, end: str):
         day += timedelta(days=1)
 
 
-def _mur_url(day) -> str:
+def mur_url(day):
+    """Build MUR file URL."""
+
     return (
         f"{BASE_URL}/"
         f"{day:%Y%m%d}090000"
@@ -60,7 +65,9 @@ def _mur_url(day) -> str:
     )
 
 
-def _curl_download(url: str, out_file: Path) -> None:
+def curl_download(url, out_file):
+    """Download using curl with Earthdata authentication."""
+
     cookie_file = Path.home() / ".urs_cookies"
 
     cmd = [
@@ -79,14 +86,12 @@ def _curl_download(url: str, out_file: Path) -> None:
     subprocess.run(cmd, check=True)
 
 
-def _crop_file(in_file: Path, out_file: Path, variable: str) -> None:
-    xmin, ymin, xmax, ymax = _buffered_bbox_from_cfg()
+def crop_file(in_file, out_file, variable):
+    """Crop dataset to bounding box."""
+
+    xmin, ymin, xmax, ymax = buffered_bbox()
 
     ds = xr.open_dataset(in_file)
-
-    if "lon" not in ds.coords or "lat" not in ds.coords:
-        ds.close()
-        raise KeyError("Expected 'lat' and 'lon' coordinates in dataset.")
 
     cropped = ds[[variable]].sel(
         lon=slice(xmin, xmax),
@@ -94,21 +99,27 @@ def _crop_file(in_file: Path, out_file: Path, variable: str) -> None:
     )
 
     cropped.to_netcdf(out_file)
+
     ds.close()
 
 
-def _download_and_crop_day(day, variable: str, out_dir: Path, tmp_dir: Path) -> None:
-    out_file = out_dir / f"sst_{day:%Y%m%d}.nc"
-    if out_file.exists():
+def download_day(day, variable, out_dir, tmp_dir):
+    """Download and crop a single day."""
+
+    final_file = out_dir / f"sst_{day:%Y%m%d}.nc"
+
+    if final_file.exists():
         return
 
     tmp_file = tmp_dir / f"mur_{day:%Y%m%d}.nc"
-    url = _mur_url(day)
 
     print(f"Downloading SST {day.isoformat()}")
 
-    _curl_download(url, tmp_file)
-    _crop_file(tmp_file, out_file, variable)
+    url = mur_url(day)
+
+    curl_download(url, tmp_file)
+
+    crop_file(tmp_file, final_file, variable)
 
     try:
         tmp_file.unlink()
@@ -116,28 +127,36 @@ def _download_and_crop_day(day, variable: str, out_dir: Path, tmp_dir: Path) -> 
         pass
 
 
-def download(dataset_cfg, dataset_dir: Path) -> None:
+def download(dataset_cfg, dataset_dir):
     """Download SST dataset."""
 
     variable = dataset_cfg["variable"]
 
     dataset_dir = Path(dataset_dir)
-    tmp_dir = dataset_dir / "_tmp_"
-
     dataset_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_dir = dataset_dir / "_tmp"
+    tmp_dir.mkdir(exist_ok=True)
 
     start = cfg["time"]["start"]
     end = cfg["time"]["end"]
 
     workers = int(cfg.get("downloads", {}).get("workers", 4))
-    days = list(_dates(start, end))
 
-    with ThreadPoolExecutor(max_workers=workers) as ex:
+    days = list(dates(start, end))
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+
         futures = [
-            ex.submit(_download_and_crop_day, day, variable, dataset_dir, tmp_dir)
+            executor.submit(
+                download_day,
+                day,
+                variable,
+                dataset_dir,
+                tmp_dir,
+            )
             for day in days
         ]
 
-        for fut in futures:
-            fut.result()
+        for f in futures:
+            f.result()
