@@ -50,6 +50,7 @@ downloads:
   workers: 8
 
 layer1:
+  method: mean      # mean | centroid
   variables:
     - sst
     - chl_a
