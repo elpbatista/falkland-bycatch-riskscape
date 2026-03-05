@@ -36,7 +36,7 @@ datasets:
     product: MUR-JPL-L4-GLOB-v4.1
     variable: analysed_sst
 
-  chlorophyll:
+  chl_a:
     provider: copernicus
     product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
     variable: CHL
@@ -52,10 +52,10 @@ downloads:
 layer1:
   variables:
     - sst
-    - chlorophyll
+    - chl_a
     - ssh
 
   transforms:
-    chlorophyll: log10
+    chl_a: log10
 
   standardize: true
