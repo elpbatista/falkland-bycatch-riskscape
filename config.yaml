@@ -18,7 +18,8 @@ grid:
 
 time:
   start: "2014-01-01"
-  end: "2023-12-31"
+  # end: "2023-12-31"
+  end: "2014-01-05"
 
 
 paths:
@@ -34,22 +35,19 @@ datasets:
     provider: podaac
     product: MUR-JPL-L4-GLOB-v4.1
     variable: analysed_sst
-    resolution: 0.01deg
 
   chlorophyll:
-    provider: nasa_oceancolor
-    product: VIIRS_SNPP_L3m_DAY_CHL
-    variable: chlor_a
-    transform: log10
-    resolution: 4km
+    provider: copernicus
+    product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
+    variable: CHL
 
   ssh:
     provider: copernicus
-    product: SEALEVEL_GLO_PHY_L4_MY_008_047
+    product: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
     variable: adt
-    resolution: 0.25deg
     
-
+downloads:
+  workers: 8
 
 layer1:
   variables:

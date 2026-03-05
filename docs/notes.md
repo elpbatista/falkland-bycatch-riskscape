@@ -261,3 +261,7 @@ Tracking → Evaluates whether species use high-probability regimes
 
 5. Realized Impact (Operational Layer)  
    P(bycatch-prone) × P(species) × Effort
+
+---
+
+Credentials file stored in `/Users/pb/.copernicusmarine/.copernicusmarine-credentials`.

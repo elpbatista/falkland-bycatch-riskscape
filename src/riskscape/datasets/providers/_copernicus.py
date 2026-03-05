@@ -26,7 +26,7 @@ def buffered_bbox():
     return xmin - dlon, xmax + dlon, ymin - dlat, ymax + dlat
 
 
-def download(dataset_cfg, dataset_dir):
+def download(dataset_cfg, output_dir):
     """Download Copernicus dataset."""
 
     product = dataset_cfg["product"]
@@ -37,8 +37,7 @@ def download(dataset_cfg, dataset_dir):
 
     xmin, xmax, ymin, ymax = buffered_bbox()
 
-    dataset_dir = Path(dataset_dir)
-    dataset_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Downloading:", product)
 
@@ -53,8 +52,8 @@ def download(dataset_cfg, dataset_dir):
         "--maximum-longitude", str(xmax),
         "--minimum-latitude", str(ymin),
         "--maximum-latitude", str(ymax),
-        "--output-directory", str(dataset_dir),
-        "--file-format", "netcdf",
+        "--output-directory", str(output_dir),
+        "--file-format", "netcdf"
     ]
 
     subprocess.run(cmd, check=True)
