@@ -28,6 +28,7 @@ paths:
   processed: "data/processed"
   grids: "data/grids"
   logs: "logs"
+  layer1: "data/layer1"
 
 datasets:
 

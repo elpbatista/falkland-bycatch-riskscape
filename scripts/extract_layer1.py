@@ -1,10 +1,8 @@
-"""Extract Layer 1 daily H3 features using lookup tables (optimized)."""
+"""Extract environmental variables to H3 grid."""
 
-from __future__ import annotations
-
-from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -12,36 +10,28 @@ import xarray as xr
 from riskscape.config import cfg, paths
 
 
-def _parse_date(value: str) -> date:
-    return datetime.fromisoformat(value).date()
+def load_lookup(dataset):
+    """Load pixel → H3 lookup."""
+
+    lookup_dir = paths.get("lookups", paths["data"] / "lookups")
+
+    file = lookup_dir / f"{dataset}_lookup.parquet"
+
+    df = pd.read_parquet(file)
+
+    pixels = df["pixel"].values
+
+    codes, h3 = pd.factorize(df["h3"])
+
+    h3 = pd.Series(h3).apply(lambda x: int(x, 16)).astype("uint64").values
+
+    return pixels, codes, h3
 
 
-def _date_range(start: str, end: str):
+def open_dataset(dataset):
+    """Open dataset."""
 
-    d0 = _parse_date(start)
-    d1 = _parse_date(end)
-
-    d = d0
-    while d <= d1:
-        yield d
-        d += timedelta(days=1)
-
-
-def _detect_coords(ds: xr.Dataset):
-
-    lat_candidates = ("lat", "latitude")
-    lon_candidates = ("lon", "longitude")
-
-    lat = next((c for c in lat_candidates if c in ds.coords), None)
-    lon = next((c for c in lon_candidates if c in ds.coords), None)
-
-    if lat is None or lon is None:
-        raise KeyError("lat/lon coords not found")
-
-    return lat, lon
-
-
-def _open_dataset(dataset_dir: Path):
+    dataset_dir = paths["raw"] / dataset
 
     files = sorted(dataset_dir.glob("*.nc"))
 
@@ -51,154 +41,132 @@ def _open_dataset(dataset_dir: Path):
     return xr.open_mfdataset(files, combine="by_coords")
 
 
-def _select_day(ds: xr.Dataset, day: date):
+def aggregate(values, pixels, codes):
+    """Aggregate raster values to H3."""
 
-    if "time" not in ds.coords:
-        return ds
+    vals = values[pixels]
 
-    day0 = np.datetime64(day.isoformat())
-    day1 = np.datetime64((day + timedelta(days=1)).isoformat())
+    sums = np.bincount(codes, weights=vals)
 
-    subset = ds.sel(time=slice(day0, day1))
-
-    if subset.sizes.get("time", 0) == 0:
-        raise KeyError
-
-    if subset.sizes.get("time", 1) > 1:
-        subset = subset.isel(time=0)
-
-    return subset
-
-
-def _load_lookup(dataset_name: str):
-
-    lookup_dir = paths.get("lookups", paths["data"] / "lookups")
-    lookup_path = lookup_dir / f"{dataset_name}_lookup.parquet"
-
-    lookup = pd.read_parquet(lookup_path)
-
-    # Convert H3 ids to categorical codes
-    lookup["h3"] = lookup["h3"].astype("category")
-
-    h3_codes = lookup["h3"].cat.codes.values
-    h3_index = lookup["h3"].cat.categories
-
-    return h3_codes, h3_index
-
-
-def _extract_mean(values, h3_codes, n_cells):
-
-    sums = np.zeros(n_cells, dtype="float64")
-    counts = np.zeros(n_cells, dtype="int64")
-
-    valid = np.isfinite(values)
-
-    np.add.at(sums, h3_codes[valid], values[valid])
-    np.add.at(counts, h3_codes[valid], 1)
+    counts = np.bincount(codes)
 
     means = sums / counts
-    means[counts == 0] = np.nan
 
-    return means
-
-
-def _extract_centroid(values, h3_codes, n_cells):
-
-    result = np.full(n_cells, np.nan, dtype="float64")
-
-    seen = np.zeros(n_cells, dtype=bool)
-
-    for i, v in enumerate(values):
-
-        if not np.isfinite(v):
-            continue
-
-        cell = h3_codes[i]
-
-        if not seen[cell]:
-            result[cell] = v
-            seen[cell] = True
-
-    return result
+    return means.astype("float32")
 
 
-def _dataset_dir(dataset_name):
+def align_to_grid(values, lookup_h3, grid_h3):
+    """Align lookup results to grid."""
 
-    return paths["raw"] / dataset_name
+    out = np.full(len(grid_h3), np.nan, dtype="float32")
+
+    idx = pd.Index(grid_h3).get_indexer(lookup_h3)
+
+    valid = idx >= 0
+
+    out[idx[valid]] = values[valid]
+
+    return out
 
 
 def main():
+    """Run extraction."""
 
-    start = cfg["time"]["start"]
-    end = cfg["time"]["end"]
+    datasets = list(cfg["layer1"]["variables"])
 
-    method = cfg["layer1"]["method"]
+    # load master H3 grid
+    resolution = cfg["grid"]["resolution"]
+    region_name = cfg["region"]["name"]
 
-    layer_vars = cfg["layer1"]["variables"]
+    grid_file = paths["grids"] / f"h3_res{resolution}_{region_name}.geojson"
 
-    datasets_cfg = cfg["datasets"]
+    grid = gpd.read_file(grid_file, columns=["id"])
 
-    all_frames = []
+    grid_h3 = grid["id"].apply(lambda x: int(x, 16)).astype("uint64").values
 
-    for dataset_name in layer_vars:
+    # open datasets
+    dss = {d: open_dataset(d) for d in datasets}
 
-        var = datasets_cfg[dataset_name]["variable"]
+    lookups = {d: load_lookup(d) for d in datasets}
 
-        print("Opening:", dataset_name)
+    times = pd.to_datetime(dss[datasets[0]].time.values)
 
-        ds = _open_dataset(_dataset_dir(dataset_name))
+    out_root = paths.get("layer1", paths["data"] / "layer1")
 
-        h3_codes, h3_index = _load_lookup(dataset_name)
+    out_root.mkdir(parents=True, exist_ok=True)
 
-        n_cells = len(h3_index)
+    current_year = None
+    year_rows = []
 
-        for day in _date_range(start, end):
+    for t in times:
 
-            try:
-                dsd = _select_day(ds, day)
-            except KeyError:
-                continue
+        date = pd.Timestamp(t)
 
-            da = dsd[var]
+        year = date.year
+
+        # if year changes → write previous year
+        if current_year is not None and year != current_year:
+
+            df_year = pd.concat(year_rows, ignore_index=True)
+
+            out_file = out_root / f"year={current_year}.parquet"
+
+            df_year.to_parquet(
+                out_file,
+                compression="zstd",
+                index=False,
+            )
+
+            print("saved", out_file)
+
+            year_rows = []
+
+        current_year = year
+
+        df_day = pd.DataFrame({"h3": grid_h3})
+
+        for dataset in datasets:
+
+            ds = dss[dataset]
+
+            var = cfg["datasets"][dataset]["variable"]
+
+            da = ds[var].sel(time=np.datetime64(date), method="nearest")
 
             values = da.values.reshape(-1)
 
-            if method == "mean":
-                agg = _extract_mean(values, h3_codes, n_cells)
+            pixels, codes, lookup_h3 = lookups[dataset]
 
-            elif method == "centroid":
-                agg = _extract_centroid(values, h3_codes, n_cells)
+            means = aggregate(values, pixels, codes)
 
-            else:
-                raise ValueError("Unknown extraction method")
+            aligned = align_to_grid(means, lookup_h3, grid_h3)
 
-            frame = pd.DataFrame(
-                {
-                    "date": day.isoformat(),
-                    "h3": h3_index,
-                    dataset_name: agg.astype("float32"),
-                }
-            )
+            df_day[dataset] = aligned.astype("float32")
 
-            all_frames.append(frame)
+        df_day["date"] = date
 
-            print(dataset_name, day, "done")
+        df_day = df_day[["date", "h3"] + datasets]
 
-        ds.close()
+        year_rows.append(df_day)
 
-    df = all_frames[0]
+        print("processed", date.date())
 
-    for other in all_frames[1:]:
-        df = df.merge(other, on=["date", "h3"], how="outer")
+    # save final year
+    if year_rows:
 
-    out_dir = paths["processed"] / "layer1"
-    out_dir.mkdir(parents=True, exist_ok=True)
+        df_year = pd.concat(year_rows, ignore_index=True)
 
-    out_file = out_dir / "layer1_h3_daily.parquet"
+        out_file = out_root / f"year={current_year}.parquet"
 
-    df.to_parquet(out_file, index=False)
+        df_year.to_parquet(
+            out_file,
+            compression="zstd",
+            index=False,
+        )
 
-    print("Saved:", out_file)
+        print("saved", out_file)
+
+    print("Extraction finished")
 
 
 if __name__ == "__main__":
