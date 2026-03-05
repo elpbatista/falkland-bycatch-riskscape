@@ -1,4 +1,8 @@
-"""PO.DAAC MUR SST downloader."""
+"""
+PO.DAAC MUR SST downloader.
+
+Download daily SST files and crop them to the buffered region.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ BASE_URL = (
 
 
 def buffered_bbox():
-    """Return buffered bounding box."""
+    """Return buffered bounding box from config."""
 
     bbox = cfg["region"]["bbox"]
     buffer_km = float(cfg["region"]["buffer_km"])
@@ -39,21 +43,20 @@ def buffered_bbox():
     return xmin - dlon, ymin - dlat, xmax + dlon, ymax + dlat
 
 
-def date_range(start, end):
-    """Yield dates between start and end."""
+def dates(start, end):
+    """Generate dates between start and end."""
 
     d0 = datetime.fromisoformat(start).date()
     d1 = datetime.fromisoformat(end).date()
 
     day = d0
-
     while day <= d1:
         yield day
         day += timedelta(days=1)
 
 
 def mur_url(day):
-    """Return daily dataset URL."""
+    """Build MUR file URL."""
 
     return (
         f"{BASE_URL}/"
@@ -63,7 +66,7 @@ def mur_url(day):
 
 
 def curl_download(url, out_file):
-    """Download file with Earthdata authentication."""
+    """Download using curl with Earthdata authentication."""
 
     cookie_file = Path.home() / ".urs_cookies"
 
@@ -84,7 +87,7 @@ def curl_download(url, out_file):
 
 
 def crop_file(in_file, out_file, variable):
-    """Crop dataset to buffered bbox."""
+    """Crop dataset to bounding box."""
 
     xmin, ymin, xmax, ymax = buffered_bbox()
 
@@ -103,46 +106,56 @@ def crop_file(in_file, out_file, variable):
 def download_day(day, variable, out_dir, tmp_dir):
     """Download and crop a single day."""
 
-    out_file = out_dir / f"sst_{day:%Y%m%d}.nc"
+    final_file = out_dir / f"sst_{day:%Y%m%d}.nc"
 
-    if out_file.exists():
+    if final_file.exists():
         return
 
     tmp_file = tmp_dir / f"mur_{day:%Y%m%d}.nc"
 
-    url = mur_url(day)
+    print(f"Downloading SST {day.isoformat()}")
 
-    print("Downloading SST", day.isoformat())
+    url = mur_url(day)
 
     curl_download(url, tmp_file)
 
-    crop_file(tmp_file, out_file, variable)
+    crop_file(tmp_file, final_file, variable)
 
-    tmp_file.unlink(missing_ok=True)
+    try:
+        tmp_file.unlink()
+    except FileNotFoundError:
+        pass
 
 
-def download(dataset_cfg, raw_dir):
+def download(dataset_cfg, dataset_dir):
     """Download SST dataset."""
 
     variable = dataset_cfg["variable"]
 
-    raw_dir = Path(raw_dir)
-    tmp_dir = raw_dir / "_tmp"
+    dataset_dir = Path(dataset_dir)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = dataset_dir / "_tmp"
+    tmp_dir.mkdir(exist_ok=True)
 
     start = cfg["time"]["start"]
     end = cfg["time"]["end"]
 
-    days = list(date_range(start, end))
-
     workers = int(cfg.get("downloads", {}).get("workers", 4))
 
-    with ThreadPoolExecutor(max_workers=workers) as ex:
+    days = list(dates(start, end))
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+
         futures = [
-            ex.submit(download_day, d, variable, raw_dir, tmp_dir)
-            for d in days
+            executor.submit(
+                download_day,
+                day,
+                variable,
+                dataset_dir,
+                tmp_dir,
+            )
+            for day in days
         ]
 
         for f in futures:
