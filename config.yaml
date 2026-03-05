@@ -36,7 +36,7 @@ datasets:
     product: MUR-JPL-L4-GLOB-v4.1
     variable: analysed_sst
 
-  chl_a:
+  chl:
     provider: copernicus
     product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
     variable: CHL
@@ -53,10 +53,10 @@ layer1:
   method: mean      # mean | centroid
   variables:
     - sst
-    - chl_a
+    - chl
     - ssh
 
   transforms:
-    chl_a: log10
+    chl: log10
 
   standardize: true

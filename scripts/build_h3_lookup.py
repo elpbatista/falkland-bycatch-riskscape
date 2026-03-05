@@ -1,4 +1,4 @@
-"""Build raster -> H3 lookup tables using direct H3 indexing."""
+"""Build pixel -> H3 lookup tables using pixel footprint polyfill."""
 
 from pathlib import Path
 
@@ -11,47 +11,59 @@ from riskscape.config import cfg
 
 
 def detect_coords(ds):
-    """Detect latitude and longitude coordinate names."""
-    lat_candidates = ("lat", "latitude")
-    lon_candidates = ("lon", "longitude")
-
-    lat = next((c for c in lat_candidates if c in ds.coords), None)
-    lon = next((c for c in lon_candidates if c in ds.coords), None)
+    lat = next((c for c in ("lat", "latitude") if c in ds.coords), None)
+    lon = next((c for c in ("lon", "longitude") if c in ds.coords), None)
 
     if lat is None or lon is None:
-        raise KeyError(f"lat/lon coordinates not found. coords={list(ds.coords)}")
+        raise KeyError("lat/lon coordinates not found")
 
     return lat, lon
 
 
-def grid_resolution():
-    """Return H3 resolution from config."""
-    return int(cfg["grid"]["resolution"])
+def open_reference_raster(dataset_name):
 
+    raw_dir = Path(cfg["paths"]["raw"])
+    dataset_dir = raw_dir / dataset_name
 
-def raw_dir():
-    return Path(cfg["paths"]["raw"])
-
-
-def lookup_dir():
-    path = Path(cfg["paths"]["data"]) / "lookups"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def build_lookup(dataset_name):
-    """Create pixel -> H3 lookup table."""
-
-    dataset_dir = raw_dir() / dataset_name
     files = sorted(dataset_dir.glob("*.nc"))
 
     if not files:
-        print(f"Skipping {dataset_name}: no .nc files")
-        return
+        raise RuntimeError(f"No raster files found for {dataset_name}")
 
-    print(f"Building lookup for {dataset_name}")
+    return xr.open_dataset(files[0])
 
-    ds = xr.open_dataset(files[0])
+
+def pixel_size(coords):
+
+    diffs = np.diff(coords)
+
+    return float(np.abs(diffs).mean())
+
+
+def pixel_polygon(lat, lon, dlat, dlon):
+
+    lat_min = lat - dlat / 2
+    lat_max = lat + dlat / 2
+    lon_min = lon - dlon / 2
+    lon_max = lon + dlon / 2
+
+    return {
+        "type": "Polygon",
+        "coordinates": [[
+            [lon_min, lat_min],
+            [lon_min, lat_max],
+            [lon_max, lat_max],
+            [lon_max, lat_min],
+            [lon_min, lat_min],
+        ]]
+    }
+
+
+def build_lookup(dataset_name):
+
+    print("Building lookup:", dataset_name)
+
+    ds = open_reference_raster(dataset_name)
 
     lat_name, lon_name = detect_coords(ds)
 
@@ -60,39 +72,48 @@ def build_lookup(dataset_name):
 
     ds.close()
 
+    dlat = pixel_size(lats)
+    dlon = pixel_size(lons)
+
     lon_grid, lat_grid = np.meshgrid(lons, lats)
 
     lat_flat = lat_grid.ravel()
     lon_flat = lon_grid.ravel()
 
-    resolution = grid_resolution()
+    resolution = int(cfg["grid"]["resolution"])
 
-    h3_ids = [
-        h3.latlng_to_cell(lat, lon, resolution)
-        for lat, lon in zip(lat_flat, lon_flat)
-    ]
+    rows = []
 
-    lookup = pd.DataFrame(
-        {
-            "pixel": np.arange(len(h3_ids), dtype=np.int64),
-            "h3": h3_ids,
-        }
-    )
+    for pixel_id, (lat, lon) in enumerate(zip(lat_flat, lon_flat)):
 
-    out_file = lookup_dir() / f"{dataset_name}_lookup.parquet"
+        poly = pixel_polygon(lat, lon, dlat, dlon)
+
+        hexes = h3.geo_to_cells(poly, resolution)
+
+        for h in hexes:
+            rows.append((pixel_id, h))
+
+    lookup = pd.DataFrame(rows, columns=["pixel", "h3"])
+
+    lookup_dir = Path(cfg["paths"]["data"]) / "lookups"
+    lookup_dir.mkdir(parents=True, exist_ok=True)
+
+    out_file = lookup_dir / f"{dataset_name}_lookup.parquet"
 
     lookup.to_parquet(out_file, index=False)
 
-    print(f"Lookup saved: {out_file}")
-    print(f"Pixels processed: {len(lookup)}")
+    print("pixels:", len(lat_flat))
+    print("rows in lookup:", len(lookup))
+    print("unique H3 cells:", lookup["h3"].nunique())
+    print("saved:", out_file)
 
 
 def main():
 
-    datasets = cfg["datasets"].keys()
+    datasets = cfg["datasets"]
 
-    for dataset in datasets:
-        build_lookup(dataset)
+    for name in datasets.keys():
+        build_lookup(name)
 
 
 if __name__ == "__main__":
