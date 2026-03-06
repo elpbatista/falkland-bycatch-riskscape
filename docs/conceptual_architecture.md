@@ -57,3 +57,11 @@
 │   • Forecasting capability                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+The structure clearly shows:
+
+- Layer 0 = data + spatial scaffolding
+- Layer 1 = harmonized physical state
+- Layer 2 = ecological feature engineering
+- Layer 3 = interaction layer
+- Layer 4 = prediction layer
