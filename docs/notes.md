@@ -265,3 +265,131 @@ Tracking → Evaluates whether species use high-probability regimes
 ---
 
 Credentials file stored in `/Users/pb/.copernicusmarine/.copernicusmarine-credentials`.
+
+---
+
+## Layer 2 — Derived Features (Ecological Feature Engineering)
+
+### What Layer 2 Should Do (Conceptually)
+
+Layer 1 = ocean state
+Layer 2 = ocean structure
+
+> I am no longer describing what the ocean is, but how it is organized dynamically. That’s what species respond to.
+
+Layer 2 features are:
+
+- Same domain
+- Same spatial grid
+- Same temporal resolution
+- Always used together in modeling
+
+So they belong together: One Layer 2 table, wide format, split by year (same structure as Layer 1).
+
+```text
+date | h3 | sst | chl | ssh | sst_grad | chl_grad | ssh_grad | sst_anom | ...
+```
+
+### Why This Is a Big Step
+
+Layer 1 = 13.6M rows of environmental state
+Layer 2 = ecological signal extraction
+
+This is where:
+
+- Frontal systems emerge
+- Habitat structure appears
+- Risk-relevant gradients become visible
+
+This is where the project becomes scientifically interesting.
+
+---
+
+## Note: Gradient Computation Strategy (Layer 2)
+
+### Decision
+
+Gradients for Layer 2 will be computed directly on the H3 grid using neighbor-based differences.
+
+Raster-level gradients are not required, as all environmental variables have already been harmonized and aggregated to the H3 spatial framework in Layer 1.
+
+This ensures architectural consistency and computational scalability.
+
+### Rationale
+
+- All modeling occurs at H3 resolution.
+- Sub-H3 raster gradients are unnecessary for the ecological scale of interest.
+- Species respond to habitat-scale contrasts, not pixel-scale derivatives.
+- H3-based gradients are computationally efficient and scalable across 10 years of daily data.
+
+### Mathematical Definition
+
+For each H3 cell i:
+
+G_i = sqrt( (1 / n) * sum((X_i - X_j)^2) )
+
+Where:
+
+- X_i = value of the environmental variable at cell i
+- X_j = value of the same variable at neighboring cell j
+- N(i) = set of ring-1 neighboring H3 cells of cell i
+- n = number of valid neighboring cells
+- G_i = gradient magnitude at cell i
+
+This represents the root-mean-square contrast between a cell and its immediate neighbors.
+
+### Implementation Details
+
+- Neighbor relationships will be precomputed once.
+- Gradients computed daily for each variable.
+- Output stored as float32.
+- Gradients aligned with the master H3 grid.
+- One wide Layer 2 table per year.
+
+### Interpretation
+
+Gradient magnitude represents habitat contrast intensity
+(e.g., thermal front strength).
+
+These features will serve as primary ecological structure predictors
+in the bycatch risk model.
+
+Status: Confirmed strategy for Layer 2 implementation.
+
+## Gradient Recommendation
+
+- SST gradient → raw
+- SSH gradient → raw
+- Chlorophyll gradient → log-transform first
+
+### Why log10 Is Better Here
+
+Because oceanography often thinks in orders of magnitude.
+
+Example:
+
+- 0.1 mg m⁻³ → oligotrophic
+- 1.0 mg m⁻³ → productive
+- 10 mg m⁻³ → bloom
+
+These are powers of 10.
+
+So:
+
+```text
+log10(0.1) = -1
+log10(1)   =  0
+log10(10)  =  1
+```
+
+Very intuitive.
+
+A 1-unit difference in log10:
+
+= 10× concentration change
+
+That’s ecologically meaningful.
+
+## Conceptual Architecture (Updated)
+
+```text
