@@ -162,9 +162,9 @@ def extract_year(year):
 def main():
     """Run Layer 2 gradient extraction for all years."""
 
-    extract_year(2014)
-    # for year in year_range():
-    #     extract_year(year)
+    # extract_year(2014)
+    for year in year_range():
+        extract_year(year)
 
 
 if __name__ == "__main__":
