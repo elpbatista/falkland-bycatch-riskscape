@@ -47,7 +47,7 @@ The following anomaly fields were merged directly into the existing Layer 2 year
 
 Each variable is stored as `float32` and written into:
 
-```
+```text
 data/layer2/year=YYYY.parquet
 ```
 
