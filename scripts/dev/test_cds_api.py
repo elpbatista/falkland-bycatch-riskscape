@@ -1,0 +1,2 @@
+import cdsapi
+cdsapi.Client()

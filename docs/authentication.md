@@ -138,7 +138,7 @@ After logging into CDS:
 File contents:
 
 ```text
-url: https://cds.climate.copernicus.eu/api/v2
+url: https://cds.climate.copernicus.eu/api
 key: YOUR_UID:YOUR_API_KEY
 ```
 
