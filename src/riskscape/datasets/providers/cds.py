@@ -28,11 +28,10 @@ def buffered_bbox():
 
 
 def download(dataset_cfg, dataset_dir):
-    """Download ERA5 daily wind data from CDS."""
+    """Download dataset from CDS."""
 
     product = dataset_cfg["product"]
-    variable_u = dataset_cfg["variable_u"]
-    variable_v = dataset_cfg["variable_v"]
+    variables = dataset_cfg["variables"]
 
     start = cfg["time"]["start"]
     end = cfg["time"]["end"]
@@ -42,40 +41,36 @@ def download(dataset_cfg, dataset_dir):
     dataset_dir = Path(dataset_dir)
     dataset_dir.mkdir(parents=True, exist_ok=True)
 
-    years = range(
-        int(start[:4]),
-        int(end[:4]) + 1,
-    )
+    start_year = int(start[:4])
+    end_year = int(end[:4])
 
     client = cdsapi.Client()
 
-    for year in years:
-        output_file = dataset_dir / f"era5_wind_daily_{year}.nc"
+    for year in range(start_year, end_year + 1):
+
+        output_file = dataset_dir / f"{product}_{year}.nc"
 
         if output_file.exists():
-            print(f"Already exists: {year}")
+            print("Already exists:", year)
             continue
 
-        print("Downloading ERA5 daily wind:", year)
+        print("Downloading:", product, year)
 
         client.retrieve(
             product,
             {
                 "product_type": "reanalysis",
-                "variable": [
-                    "10m_u_component_of_wind",
-                    "10m_v_component_of_wind",
-                ],
+                "variable": variables,
                 "year": str(year),
                 "month": [f"{m:02d}" for m in range(1, 13)],
                 "day": [f"{d:02d}" for d in range(1, 32)],
                 "daily_statistic": "daily_mean",
                 "time_zone": "UTC+00:00",
                 "area": [
-                    ymax,   # north
-                    xmin,   # west
-                    ymin,   # south
-                    xmax,   # east
+                    ymax,  # north
+                    xmin,  # west
+                    ymin,  # south
+                    xmax,  # east
                 ],
                 "format": "netcdf",
             },

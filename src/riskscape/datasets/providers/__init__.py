@@ -2,7 +2,7 @@
 
 from . import copernicus
 from . import podaac
-
+from . import cds
 
 def get_provider(name):
 
@@ -11,5 +11,8 @@ def get_provider(name):
 
     if name == "podaac":
         return podaac
+    
+    if name == "cds":
+        return cds
 
     raise ValueError(f"Unknown provider: {name}")
