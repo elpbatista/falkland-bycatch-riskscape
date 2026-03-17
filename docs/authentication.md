@@ -1,9 +1,10 @@
 # Dataset Authentication Guide
 
-This project downloads datasets from two external providers. Both require valid credentials before any data can be retrieved.
+This project downloads datasets from three external providers. All require valid credentials before any data can be retrieved.
 
-- **NASA PO.DAAC** (MUR SST) – accessed over HTTPS using [Earthdata Login](https://urs.earthdata.nasa.gov/).
-- **Copernicus Marine Service (CMEMS)** – accessed through the `copernicusmarine` CLI.
+- **NASA PO.DAAC** (MUR SST) – accessed over HTTPS using [Earthdata Login](https://urs.earthdata.nasa.gov/)
+- **Copernicus Marine Service (CMEMS)** – accessed through the `copernicusmarine` CLI
+- **Copernicus Climate Data Store (CDS / ERA5)** – accessed through the `cdsapi` Python client
 
 ---
 
@@ -16,7 +17,7 @@ Register at:
 
 ### 1.2 Configure credentials
 
-The downloader uses `curl` with `-n` to read a `.netrc` file, and it handles cookies automatically.
+The downloader uses `curl` with `-n` to read a `.netrc` file and handles cookies automatically.
 
 #### macOS / Linux
 
@@ -36,17 +37,17 @@ The downloader uses `curl` with `-n` to read a `.netrc` file, and it handles coo
 
 #### Windows
 
-1. In PowerShell or any plain-text editor, create `%USERPROFILE%\.netrc` with the same content as above.
-2. Ensure the file sits in your user profile directory (typically `C:\Users\<you>`).
+1. Create `%USERPROFILE%\.netrc` with the same content as above.
+2. Ensure it is plain text and located in your user profile directory.
 
-> **Tip:** don’t use a rich-text editor; the file must be plain text.
+> **Tip:** Do not use a rich-text editor.
 
 ### 1.3 Cookie handling
 
-The download script uses `curl` options to maintain session cookies:
+The download script uses:
 
-- `-c <cookie_file>` writes/updates cookies
-- `-b <cookie_file>` sends cookies with requests
+- `-c <cookie_file>` to write/update cookies  
+- `-b <cookie_file>` to send cookies with requests  
 
 Default locations:
 
@@ -55,11 +56,9 @@ Default locations:
 | macOS / Linux | `~/.urs_cookies`             |
 | Windows       | `%USERPROFILE%\.urs_cookies` |
 
-You do **not** need to create these files manually – the script does it for you.
+These files are created automatically by the script.
 
-### 1.4 Verify your authentication
-
-Run the following command to check the credentials are working:
+### 1.4 Verify authentication
 
 **macOS / Linux:**
 
@@ -73,7 +72,7 @@ curl -n -I https://urs.earthdata.nasa.gov
 curl.exe -n -I https://urs.earthdata.nasa.gov
 ```
 
-A successful login returns an HTTP 200 or 302 response. Authentication errors indicate invalid credentials.
+A successful response returns HTTP 200 or 302.
 
 ---
 
@@ -81,7 +80,8 @@ A successful login returns an HTTP 200 or 302 response. Authentication errors in
 
 ### 2.1 Create an account
 
-Register at: <https://marine.copernicus.eu/>
+Register at:  
+<https://marine.copernicus.eu/>
 
 ### 2.2 Install the Copernicus Marine Toolbox
 
@@ -95,7 +95,7 @@ pip install copernicusmarine
 copernicusmarine login
 ```
 
-Credentials are stored locally for later use.
+Credentials are stored locally by the CLI.
 
 ### 2.4 Test access
 
@@ -103,30 +103,91 @@ Credentials are stored locally for later use.
 copernicusmarine describe --dataset-id cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
 ```
 
-A metadata response indicates successful authentication.
+A metadata response confirms authentication.
 
 ---
 
-## 3. Credential storage locations
+## 3. Copernicus Climate Data Store (CDS / ERA5)
 
-- **Earthdata:**  
-  - macOS / Linux: `~/.netrc`, `~/.urs_cookies`  
-  - Windows: `%USERPROFILE%\.netrc`, `%USERPROFILE%\.urs_cookies`
-- **Copernicus Marine:**  
-  Stored by the `copernicusmarine` CLI under your user profile directory (location varies by OS).
+ERA5 wind data is accessed via the CDS API.
 
-> **Security reminder:**  
-> Never commit these files to version control.
+### 3.1 Create an account
+
+Register at:  
+<https://cds.climate.copernicus.eu/>
+
+Before downloading ERA5 data, you must accept the license terms for the dataset in the CDS web interface.
+
+### 3.2 Install the CDS API client
+
+```sh
+pip install cdsapi
+```
+
+### 3.3 Configure API credentials
+
+After logging into CDS:
+
+1. Go to **Profile → API key**
+2. Copy your credentials
+3. Create a file:
+
+   - macOS / Linux: `~/.cdsapirc`
+   - Windows: `%USERPROFILE%\.cdsapirc`
+
+File contents:
+
+```text
+url: https://cds.climate.copernicus.eu/api/v2
+key: YOUR_UID:YOUR_API_KEY
+```
+
+Replace with your actual UID and API key.
+
+### 3.4 Restrict permissions (macOS / Linux)
+
+```bash
+chmod 600 ~/.cdsapirc
+```
+
+### 3.5 Test access
+
+Create a minimal Python test:
+
+```python
+import cdsapi
+cdsapi.Client()
+```
+
+If no authentication error appears, the configuration is correct.
 
 ---
 
-## 4. Security best practices
+## 4. Credential Storage Locations
 
-- **Do not** put credentials in:
+| Service               | Credential File                  |
+|-----------------------|----------------------------------|
+| Earthdata             | `~/.netrc`, `~/.urs_cookies`     |
+| Copernicus Marine     | Stored by `copernicusmarine` CLI |
+| Copernicus CDS (ERA5) | `~/.cdsapirc`                    |
+
+(Windows equivalents use `%USERPROFILE%`.)
+
+---
+
+## 5. Security Best Practices
+
+- **Never commit credentials to version control**
+- Do not store passwords or API keys in:
   - source code
   - `config.yaml`
-  - any Git repository
+  - notebooks
+  - shared repositories
 
-- Recommended approaches:
-  - use a `.netrc` file + script‑managed cookies for Earthdata/PO.DAAC
-  - use `copernicusmarine login` for CMEMS
+Recommended approach:
+
+- `.netrc` + script-managed cookies for Earthdata  
+- `copernicusmarine login` for CMEMS  
+- `.cdsapirc` for CDS (ERA5)  
+
+Keep these files outside the repository and secured with proper file permissions.
