@@ -10,20 +10,11 @@ from riskscape.datasets.providers import get_provider
 
 def main():
 
-    parser = argparse.ArgumentParser(
-        description="Download project datasets"
-    )
-
+    parser = argparse.ArgumentParser(description="Download project datasets")
     parser.add_argument(
         "--clean",
         action="store_true",
         help="Delete existing dataset folders before downloading",
-    )
-
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        help="Download only a specific dataset (e.g. wind)",
     )
 
     args = parser.parse_args()
@@ -38,13 +29,7 @@ def main():
 
         print("Cleaning dataset folders")
 
-        targets = (
-            [args.dataset]
-            if args.dataset
-            else datasets.keys()
-        )
-
-        for name in targets:
+        for name in datasets:
 
             dataset_dir = raw_dir / name
 
@@ -54,9 +39,6 @@ def main():
 
     # Download datasets
     for name, ds in datasets.items():
-
-        if args.dataset and name != args.dataset:
-            continue
 
         provider = get_provider(ds["provider"])
 
