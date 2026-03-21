@@ -390,6 +390,69 @@ A 1-unit difference in log10:
 
 That’s ecologically meaningful.
 
-## Conceptual Architecture (Updated)
+## Wind Variables (ERA5) — Quick Reference
+
+### Components
+
+- **u10**: zonal wind (east–west)  
+  - > 0 → toward east  
+  - < 0 → toward west  
+
+- **v10**: meridional wind (north–south)  
+  - > 0 → toward north  
+  - < 0 → toward south  
+
+Both are measured at **10 m above surface** and in **m/s**.
+
+---
+
+### Wind Speed (Layer 2C primary variable)
+
+$$
+WS = \sqrt{u_{10}^2 + v_{10}^2}
+$$
+
+- Scalar magnitude  
+- Represents wind intensity  
+- Typical range: ~0–20 m/s  
+
+Stored as:
+
+`wind`
+
+---
+
+### Wind Direction (optional, later)
+
+$$
+\theta = \arctan2(v_{10}, u_{10})
+$$
+
+Convert to meteorological convention:
+
+$$
+\theta_{met} = (270 - \theta_{deg}) \bmod 360
+$$
+
+- Degrees (0–360)  
+- Indicates **where wind comes FROM**
+
+---
+
+### Wind Notes
+
+- No additional data needed — $u10$ and $v10$ are sufficient  
+- Direction is **not required** for initial modeling  
+- It can be computed later from the same raw ERA5 files if needed  
+- Wind speed is the primary variable for:
+  - mixing  
+  - fronts  
+  - ecological forcing  
 
 ```text
+         v (north)
+          ↑
+          |
+          |
+          • ----→ u (east)
+```
