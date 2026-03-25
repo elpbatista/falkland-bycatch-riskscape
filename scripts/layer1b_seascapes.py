@@ -1,25 +1,24 @@
-"""Layer 1b: Dynamic seascape classification (robust clustering with sampling)."""
+"""Layer 1b: train on valid CHL, predict everywhere."""
 
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
+from joblib import dump
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from joblib import dump
 
 from riskscape.config import cfg, paths
 
 
 def year_range():
-    start_year = pd.to_datetime(cfg["time"]["start"]).year
-    end_year = pd.to_datetime(cfg["time"]["end"]).year
-    return range(start_year, end_year + 1)
+    start = pd.to_datetime(cfg["time"]["start"]).year
+    end = pd.to_datetime(cfg["time"]["end"]).year
+    return range(start, end + 1)
 
 
 def load_all_layer1():
-    """Load and concatenate all Layer 1 data."""
+    """Load all Layer 1 yearly files."""
 
     layer1_dir = Path(paths["layer1"])
     dfs = []
@@ -39,76 +38,64 @@ def load_all_layer1():
 
 
 def safe_log_chl(chl):
-    """Log-transform CHL safely."""
+    """Log-transform CHL, masking non-positive values."""
+
     chl = chl.copy()
     chl[chl <= 0] = np.nan
     return np.log10(chl)
 
 
-def fill_chl(X):
-    """Fill NaN CHL with median (per batch)."""
-    X = X.copy()
+def prepare_features(df):
+    """Build feature matrix."""
 
-    chl = X[:, 1]
+    df = df.copy()
+    df["chl"] = safe_log_chl(df["chl"].to_numpy(dtype=np.float32))
+    x = df[["sst", "chl", "ssh"]].to_numpy(dtype=np.float32)
+    return df, x
+
+
+def fill_chl(x):
+    """Fill missing CHL with the batch median."""
+
+    x = x.copy()
+    chl = x[:, 1]
 
     if np.isnan(chl).any():
         median = np.nanmedian(chl)
         chl[np.isnan(chl)] = median
 
-    X[:, 1] = chl
-    return X
+    x[:, 1] = chl
+    return x
 
 
-def prepare_features(df):
-    """Prepare feature matrix and valid mask."""
-
-    df = df.copy()
-
-    df["chl"] = safe_log_chl(df["chl"].to_numpy(dtype=np.float32))
-
-    X = df[["sst", "chl", "ssh"]].to_numpy(dtype=np.float32)
-
-    # Only require SST and SSH
-    valid_mask = (
-        np.isfinite(X[:, 0]) &  # sst
-        np.isfinite(X[:, 2])    # ssh
-    )
-
-    return df, X, valid_mask
-
-
-def fit_model(X, k):
+def fit_model(x, k):
     """Fit scaler and clustering model."""
 
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    x_scaled = scaler.fit_transform(x)
 
     model = KMeans(
         n_clusters=k,
         random_state=42,
         n_init=10,
     )
-
-    model.fit(X_scaled)
+    model.fit(x_scaled)
 
     return scaler, model
 
 
 def assign_regimes(df, labels):
-    """Attach regime labels."""
+    """Attach regime labels to the table."""
 
     df = df.copy()
-
     regime = labels.astype("float32")
     regime[regime < 0] = np.nan
-
     df["regime_id"] = regime
-
     return df[["date", "h3", "regime_id"]]
 
 
 def save_by_year(df):
-    """Save Layer 1b outputs by year."""
+    """Write Layer 1b outputs by year."""
 
     out_dir = Path(paths["data"]) / "layer1b"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -117,11 +104,8 @@ def save_by_year(df):
 
     for year, group in df.groupby("year"):
         out_path = out_dir / f"year={year}.parquet"
-
         group = group.drop(columns="year")
-
         group.to_parquet(out_path, index=False)
-
         print(f"Saved: {out_path}")
         print(f"Rows: {len(group)}")
 
@@ -132,92 +116,62 @@ def save_artifacts(scaler, model, k):
     model_dir = Path(paths["data"]) / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    scaler_path = model_dir / "layer1b_scaler.joblib"
-    model_path = model_dir / f"layer1b_k{k}.joblib"
-
-    dump(scaler, scaler_path)
-    dump(model, model_path)
-
-    print(f"Saved scaler: {scaler_path}")
-    print(f"Saved model: {model_path}")
+    dump(scaler, model_dir / "layer1b_scaler.joblib")
+    dump(model, model_dir / f"layer1b_k{k}.joblib")
 
 
 def main():
-
     k = 7
 
     print("Loading Layer 1 data")
     df = load_all_layer1()
-
     df["date"] = pd.to_datetime(df["date"])
 
     print("Preparing features")
-    df, X, valid_mask = prepare_features(df)
+    df, x = prepare_features(df)
 
-    valid_idx = np.where(valid_mask)[0]
+    # Train only where SST, CHL, and SSH are all available.
+    train_mask = (
+        np.isfinite(x[:, 0]) &
+        np.isfinite(x[:, 1]) &
+        np.isfinite(x[:, 2])
+    )
 
-    print(f"Valid rows: {len(valid_idx)} / {len(df)}")
+    train_idx = np.where(train_mask)[0]
+    print(f"Training rows: {len(train_idx)} / {len(df)}")
 
-    # --- SAMPLING ---
-    sample_size = min(2_000_000, len(valid_idx))
+    sample_size = min(2_000_000, len(train_idx))
     np.random.seed(42)
 
-    sample_idx = np.random.choice(valid_idx, size=sample_size, replace=False)
+    sample_idx = np.random.choice(train_idx, size=sample_size, replace=False)
+    x_sample = x[sample_idx]
 
-    print(f"Training sample size: {sample_size}")
+    print(f"Training sample size: {len(x_sample)}")
 
-    # --- TRAINING DATA ---
-    X_sample = X[sample_idx]
-
-    # Keep rows with valid SST + SSH
-    finite_mask_sample = (
-        np.isfinite(X_sample[:, 0]) &
-        np.isfinite(X_sample[:, 2])
-    )
-
-    X_sample = X_sample[finite_mask_sample]
-
-    # Fill CHL before scaling
-    X_sample = fill_chl(X_sample)
-
-    print(f"Training after filter: {len(X_sample)}")
-
-    # --- FIT MODEL ---
     print(f"Fitting clustering model (k={k})")
-    scaler, model = fit_model(X_sample, k)
+    scaler, model = fit_model(x_sample, k)
 
-    print("Saving scaler and model")
     save_artifacts(scaler, model, k)
 
-    # --- PREDICT FULL DATASET ---
-    print("Predicting full dataset")
-
-    X_valid = X[valid_mask]
-
-    finite_mask_valid = (
-        np.isfinite(X_valid[:, 0]) &
-        np.isfinite(X_valid[:, 2])
+    # Predict everywhere SST and SSH exist, imputing CHL only here.
+    pred_mask = (
+        np.isfinite(x[:, 0]) &
+        np.isfinite(x[:, 2])
     )
 
-    labels_valid = np.full(len(X_valid), -1, dtype="int16")
+    pred_idx = np.where(pred_mask)[0]
+    print(f"Prediction rows: {len(pred_idx)} / {len(df)}")
 
-    if finite_mask_valid.any():
-        X_subset = X_valid[finite_mask_valid]
-
-        # Fill CHL before scaling
-        X_subset = fill_chl(X_subset)
-
-        X_scaled = scaler.transform(X_subset)
-        labels_valid[finite_mask_valid] = model.predict(X_scaled)
+    x_pred = fill_chl(x[pred_idx])
+    x_scaled = scaler.transform(x_pred)
+    labels_pred = model.predict(x_scaled)
 
     labels = np.full(len(df), -1, dtype="int16")
-    labels[valid_mask] = labels_valid
+    labels[pred_idx] = labels_pred
 
-    # --- ASSIGN ---
     print("Assigning regimes")
     df_regimes = assign_regimes(df, labels)
 
-    # --- SAVE ---
     print("Saving outputs")
     save_by_year(df_regimes)
 
