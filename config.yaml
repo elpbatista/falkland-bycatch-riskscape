@@ -29,6 +29,7 @@ paths:
   grids: "data/grids"
   logs: "logs"
   layer1: "data/layer1"
+  layer2: "data/layer2"
   plots: "plots"
   models: "data/models"
   falklands: "../Data/falklands_uniqueland/Falklands_UNIQUEland_UTM21S_2017.shp"
