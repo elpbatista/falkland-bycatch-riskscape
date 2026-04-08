@@ -97,14 +97,14 @@ X_anom(i,t) = X(i,t) − X̄(i,d(t))
 
 Where d(t) is the day-of-year.
 
-### Variables
+### More Variables
 
 - sst_anom
 - chl_anom (in log space)
 - ssh_anom
 - wind_anom
 
-### Interpretation
+### More Interpretation
 
 - Positive → above seasonal expectation
 - Negative → below seasonal expectation
