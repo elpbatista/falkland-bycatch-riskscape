@@ -1,6 +1,6 @@
 # Bycatch Risk Model Specification <!-- omit in toc -->
 
-*This is a draft specification document for the bycatch risk model, outlining the scientific framework, data engineering requirements, and modeling approach. The specification is intended to guide the development of a comprehensive model that integrates environmental conditions, species presence, fishing activity, and bycatch events to estimate bycatch risk across space and time.*
+*This is a draft specification document for the bycatch risk model, outlining the scientific framework, data engineering requirements, and modeling approach.*
 
 ---
 
