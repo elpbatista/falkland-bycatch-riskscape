@@ -71,17 +71,15 @@ The system is conceptualized as a five-component structure:
 - **Bycatch Events (Outcome Layer)**  
   Outcomes resulting from the combination of hazard and exposure, leading to capture or mortality of species.
 
-### 1.5. Spatial Domain
+### 1.5. Assumptions
 
-- Define study region conceptually
+- Environmental conditions influence species presence.
+- Species presence and environmental conditions define ecological hazard.
+- Fishing activity represents exposure independent of ecological processes.
+- Bycatch events arise from the combination of ecological hazard and exposure to fishing activity.
+- The system is spatially and temporally continuous, with processes varying across both dimensions.
 
-### 1.6. Temporal Domain
-
-- Define time representation (date, DOY, adjusted DOY)
-
-### 1.7. Assumptions
-
-- List all scientific assumptions explicitly
+---
 
 ## 2. Data Engineering Specification
 
