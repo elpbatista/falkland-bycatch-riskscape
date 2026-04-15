@@ -16,179 +16,162 @@ TOC goes here
 
 ---
 
-## 1. Scientific Framework
-
-### 1.1. Core Logic
-
-The system can be summarized through two primary relationships:
-
-- Environmental conditions and species presence together define ecological hazard.
-- Ecological hazard and exposure to fishing activity together determine the occurrence of bycatch events.
-
-### 1.2. System Components
-
-- Environmental Conditions
-- Species Presence
-- Fishing Activity
-- Bycatch Events
-
-### 1.3. Definitions
+## 1. Definitions
 
 - **Environmental Conditions**  
-  The physical state of the ocean varying in space and time, consistent with the concept of dynamic seascapes as described by Maria Kavanaugh.
+  The physical state of the ocean across space and time, consistent with the concept of dynamic seascapes (Kavanaugh).
 
 - **Species Presence**  
-  The occurrence of seabirds and marine mammals in space and time.
+  The occurrence of seabirds and marine mammals across space and time.
 
 - **Fishing Activity**  
-  Human fishing operations characterized by their spatial distribution and associated effort.
+  Fishing operations characterized by their spatial distribution and associated effort.
 
 - **Bycatch Events**  
-  Interactions between fishing activity and species that result in capture or mortality.
+  Interactions between fishing activity and species resulting in capture or mortality.
 
 - **Gradients**  
-  Local spatial variation of a variable, representing changes between neighboring locations.
+  Local spatial variation of environmental variables, representing changes between neighboring locations.
 
 - **Anomalies**  
-  Deviations of a variable from its typical seasonal pattern at a given location and time of year.
-
-### 1.4. Conceptual Structure
-
-The system is conceptualized as a five-component structure:
-
-- **Seascapes (Physical Layer)**  
-  Environmental conditions describing the spatial–temporal physical state of the ocean.
-
-- **Species Presence (Ecological Layer)**  
-  Spatial–temporal presence of species.
-
-- **Hazard (Ecological Potential)**  
-  Conditions under which species presence and environmental factors create the potential for interaction, independent of fishing activity.
-
-- **Exposure (Fishing Activity)**  
-  Spatial–temporal occurrence of fishing activity representing the potential for species to be exposed to fishing operations.
-
-- **Bycatch Events (Outcome Layer)**  
-  Outcomes resulting from the combination of hazard and exposure, leading to capture or mortality of species.
-
-### 1.5. Assumptions
-
-- Environmental conditions influence species presence.
-- Species presence and environmental conditions define ecological hazard.
-- Fishing activity represents exposure independent of ecological processes.
-- Bycatch events arise from the combination of ecological hazard and exposure to fishing activity.
-- The system is spatially and temporally continuous, with processes varying across both dimensions.
+  Deviations of environmental variables from their typical seasonal pattern at a given location and time of year.
 
 ---
 
-## 2. Data Engineering Specification
+## 2. Scientific Framework
 
-### 2.1. Data Sources
+### 2.1. Core Logic
 
-- **Environmental Conditions**  
-  Represented using satellite-derived and modeled oceanographic variables, including:
+- Environmental conditions and species presence define ecological hazard.
+- Ecological hazard and fishing activity determine the occurrence of bycatch events.
+
+### 2.2. Conceptual Structure
+
+The system is conceptualized as a five-component structure:
+
+- **Seascapes (Physical Layer)**
+- **Species Presence (Ecological Layer)**
+- **Hazard (Ecological Potential)** → defined by environmental conditions and species presence, independent of fishing activity.
+- **Exposure (Fishing Activity)**
+- **Bycatch Events (Outcome Layer)** → resulting from the combination of hazard and exposure.
+
+### 2.3. Assumptions
+
+- The system is spatially and temporally continuous.
+- Environmental conditions, species presence, and fishing activity vary across space and time.
+
+---
+
+## 3. Data Engineering Specification
+
+### 3.1. Data Sources
+
+- **Environmental Conditions**
   - Sea Surface Temperature (SST)
   - Chlorophyll-a concentration (Chl-a)
   - Sea Surface Height (SSH)
   - Wind
 
-- **Species Presence**  
-  Represented using telemetry data describing the spatial–temporal locations of tracked individuals.
+- **Species Presence**
+  - Telemetry data
 
-- **Fishing Activity (Exposure)**  
-  Represented using spatial–temporal records of fishing operations and associated effort.
+- **Fishing Activity**
+  - Fishing effort data
 
-- **Bycatch Events**  
-  Represented using observational records of interactions resulting in capture or mortality.
+- **Bycatch Events**
+  - Observational records
 
-### 2.2. Spatial Representation
+### 3.2. Spatial Representation
 
-The system is represented using the H3 discrete global grid, providing a common spatial unit for all variables and system components.
+- H3 discrete global grid (resolution 6)
+- Hexagonal cells define the spatial unit of analysis
+- All variables and system components are represented at the cell level
 
-### 2.3. Temporal Representation
+### 3.3. Temporal Representation
 
-- Date field
-- DOY / adjusted DOY (if implemented)
-- Handling of leap years
+- Calendar date as primary temporal reference
+- Daily temporal resolution
+- Seasonal variability represented using day-of-year (DOY)
+- Leap years handled through adjusted DOY representation
 
-### 2.4. Derived Variables
+### 3.4. Derived Variables
 
-- Gradients
-- Anomalies
-- Standardized variables
+- **Gradients**
+  - Computed from environmental variables
+  - Represent local spatial variation between neighboring cells
 
-### 2.5. Processing Steps
+- **Anomalies**
+  - Computed from environmental variables
+  - Represent deviations from the typical seasonal pattern at each location
 
-- Raw data ingestion
-- Cleaning and filtering
-- Spatial aggregation to H3
+### 3.5. Data Structure
+
+- Unit of analysis: H3 cell × day
+- Each record represents a single cell at a given date
+- Variables are stored as attributes of each cell–day record
+- All system components are represented within the same structure
+
+### 3.6. Processing Steps
+
+- Data ingestion
+- Data cleaning and filtering
+- Spatial aggregation (H3)
 - Temporal alignment
-- Variable derivation
-- Standardization
+- Derived variable computation
+- Variable standardization
 
-### 2.6. Data Structure
+### 3.7. Validation
 
-- File formats (e.g., Parquet)
-- Partitioning strategy (e.g., by year)
-- Column schema
-
-### 2.7. Validation
-
-- Range checks
-- Missing values
-- Consistency checks across years
+- Range validation
+- Missing data validation
+- Temporal consistency validation
+- Spatial consistency validation
 - Statistical summaries
 
-### 2.8. Reproducibility
+## 4. Modeling Specification
 
-- Scripts
-- Configuration files
-- Logging of sources and parameters
-
-## 3. Modeling Specification
-
-### 3.1. Modeling Objective
+### 4.1. Modeling Objective
 
 - Define prediction target
 
-### 3.2. Predictors
+### 4.2. Predictors
 
 - Environmental variables
 - Derived variables (gradients, anomalies)
 - Temporal features (e.g., DOY encoding)
 
-### 3.3. Target Variables
+### 4.3. Target Variables
 
 - Bycatch observations (if available)
 - Proxy variables (if applicable)
 
-### 3.4. Feature Representation
+### 4.4. Feature Representation
 
 - Standardized variables (_z)
 - Temporal encoding (e.g., sin/cos DOY)
 
-### 3.5. Data Assembly
+### 4.5. Data Assembly
 
 - Unit of analysis (e.g., cell × day)
 - Join logic across datasets
 
-### 3.6. Training Dataset
+### 4.6. Training Dataset
 
 - Time range
 - Inclusion criteria
 - Handling missing data
 
-### 3.7. Validation Strategy
+### 4.7. Validation Strategy
 
 - Temporal split
 - Spatial considerations
 
-### 3.8. Outputs
+### 4.8. Outputs
 
 - Predicted risk
 - Intermediate model outputs
 
-## 4. Notes
+## 5. Notes
 
 - No mixing between sections
 - Scientific logic must not depend on file structure
