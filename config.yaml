@@ -1,4 +1,4 @@
-region:
+rregion:
   name: falkland_islands
   crs: EPSG:4326
 
@@ -10,32 +10,29 @@ region:
 
   buffer_km: 50
 
-
 grid:
   system: H3
   resolution: 6
 
-
 time:
   start: "2014-01-01"
   end: "2023-12-31"
-  # end: "2014-01-05"
-
 
 paths:
   data: "data"
   raw: "data/raw"
   processed: "data/processed"
   grids: "data/grids"
-  logs: "logs"
   layer1: "data/layer1"
   layer2: "data/layer2"
-  plots: "plots"
   models: "data/models"
+  logs: "logs"
+  plots: "plots"
+
   falklands: "../Data/falklands_uniqueland/Falklands_UNIQUEland_UTM21S_2017.shp"
 
-datasets:
 
+datasets:
   sst:
     provider: podaac
     product: MUR-JPL-L4-GLOB-v4.1
