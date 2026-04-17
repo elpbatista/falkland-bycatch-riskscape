@@ -1,11 +1,13 @@
-"""Build the H3 grid defined in config.yaml."""
+"""Build the H3 grid defined in the active configuration."""
 
 from riskscape.grid import build_h3_grid
 
 
 def main():
-    """Run the grid generation pipeline."""
+    """Run grid generation."""
+    print("Building H3 grid...")
     build_h3_grid()
+    print("Grid generation complete.")
 
 
 if __name__ == "__main__":
