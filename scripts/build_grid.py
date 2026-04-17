@@ -1,6 +1,6 @@
 """Build the H3 grid defined in the active configuration."""
 
-from riskcape.grid import build_h3_grid
+from riskscape.grid import build_h3_grid
 
 
 def main():

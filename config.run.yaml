@@ -23,7 +23,9 @@ paths:
   models: data/models
   logs: logs
   plots: plots
-  falklands: ../Data/falklands_uniqueland/Falklands_UNIQUEland_UTM21S_2017.shp
+references:
+  land: data/reference/ne_10m_land/ne_10m_land.shp
+  coastline: data/reference/ne_10m_coastline/ne_10m_coastline.shp
 datasets:
   sst:
     provider: podaac
