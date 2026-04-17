@@ -1,10 +1,10 @@
-"""Provider loader."""
+"""Provider module loader."""
 
 import importlib
 
 
 def get_provider(name):
-    """Return provider module by name."""
+    """Load a provider module by its name."""
     module_name = f"riskscape.providers.{name}"
 
     try:
