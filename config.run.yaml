@@ -1,0 +1,57 @@
+region:
+  name: falkland_islands
+  crs: EPSG:4326
+  bbox:
+    xmin: -64
+    ymin: -57
+    xmax: -51
+    ymax: -47
+  buffer_km: 50
+grid:
+  system: H3
+  resolution: 6
+time:
+  start: '2014-01-01'
+  end: '2023-12-31'
+paths:
+  data: data
+  raw: data/raw
+  processed: data/processed
+  grids: data/grids
+  layer1: data/layer1
+  layer2: data/layer2
+  models: data/models
+  logs: logs
+  plots: plots
+  falklands: ../Data/falklands_uniqueland/Falklands_UNIQUEland_UTM21S_2017.shp
+datasets:
+  sst:
+    provider: podaac
+    product: MUR-JPL-L4-GLOB-v4.1
+    variable: analysed_sst
+  chl:
+    provider: copernicus
+    product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
+    version: 202311
+    variable: CHL
+  ssh:
+    provider: copernicus
+    product: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
+    variable: adt
+  wind:
+    provider: cds
+    product: derived-era5-single-levels-daily-statistics
+    variables:
+    - 10m_u_component_of_wind
+    - 10m_v_component_of_wind
+downloads:
+  workers: 8
+layer1:
+  method: mean
+  variables:
+  - sst
+  - chl
+  - ssh
+  transforms:
+    chl: log10
+  standardize: true
