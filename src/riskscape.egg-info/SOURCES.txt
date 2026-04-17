@@ -6,3 +6,9 @@ src/riskscape.egg-info/PKG-INFO
 src/riskscape.egg-info/SOURCES.txt
 src/riskscape.egg-info/dependency_links.txt
 src/riskscape.egg-info/top_level.txt
+src/riskscape/grid/__init__.py
+src/riskscape/grid/h3_grid.py
+src/riskscape/providers/__init__.py
+src/riskscape/providers/cds.py
+src/riskscape/providers/copernicus.py
+src/riskscape/providers/podaac.py

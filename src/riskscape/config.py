@@ -1,11 +1,12 @@
 """
 Project configuration loader.
 
-Loads config.yaml and resolves all paths relative to the
-project root directory.
+Loads config.yaml (or overridden config) and resolves all paths
+relative to the project root directory.
 """
 
 from pathlib import Path
+import os
 import yaml
 
 
@@ -26,9 +27,14 @@ def find_project_root() -> Path:
 # Resolve project root
 PROJECT_ROOT = find_project_root()
 
-# Load configuration
-CONFIG_FILE = PROJECT_ROOT / "config.yaml"
+# Select config file (override or default)
+CONFIG_NAME = os.environ.get("RISKCAPE_CONFIG", "config.yaml")
+CONFIG_FILE = PROJECT_ROOT / CONFIG_NAME
 
+if not CONFIG_FILE.exists():
+    raise FileNotFoundError(f"{CONFIG_NAME} not found in project root")
+
+# Load configuration
 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
     cfg = yaml.safe_load(f)
 
