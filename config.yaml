@@ -44,7 +44,6 @@ datasets:
   chl:
     provider: copernicus
     product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
-    version: 202311 # This exact version and part of the dataset will be retired on the 2026-03-31T13:00:00.000Z. For more information you can check: https://marine.copernicus.eu/user-corner/product-roadmap/transition-information
     variable: CHL
 
   ssh:

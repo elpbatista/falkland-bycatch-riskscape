@@ -36,7 +36,6 @@ datasets:
   chl:
     provider: copernicus
     product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
-    version: 202311
     variable: CHL
   ssh:
     provider: copernicus
