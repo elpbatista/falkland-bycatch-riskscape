@@ -1,14 +1,23 @@
 """Build the H3 grid defined in the active configuration."""
 
+import logging
+
 from riskscape.grid import build_h3_grid
+from riskscape.logs import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> int:
     """Run grid generation."""
-    print("Building H3 grid...")
+    setup_logging(stage="build_grid", verbose=True)
+    logger.info("Starting grid generation")
+
     build_h3_grid()
-    print("Grid generation complete.")
+    logger.info("Grid generation complete")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
