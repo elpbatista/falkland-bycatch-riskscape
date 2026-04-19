@@ -3,7 +3,7 @@
 import logging
 
 from riskscape.grid import build_h3_grid
-from riskscape.logs import setup_logging
+from riskscape.logs import setup_logging, setup_pipeline_logging, stage_context
 
 logger = logging.getLogger(__name__)
 
@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 def main() -> int:
     """Run grid generation."""
     setup_logging(stage="build_grid", verbose=True)
-    logger.info("Starting grid generation")
+    setup_pipeline_logging(verbose=True)
 
-    build_h3_grid()
-    logger.info("Grid generation complete")
+    with stage_context("build_grid"):
+        build_h3_grid()
 
     return 0
 

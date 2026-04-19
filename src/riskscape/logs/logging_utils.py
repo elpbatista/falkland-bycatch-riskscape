@@ -6,6 +6,8 @@ from typing import Optional
 
 from .file_manager import rotate_log_on_date_change, ensure_logs_dir
 
+PIPELINE_LOGGER_NAME = "riskscape.pipeline"
+
 
 def _sanitize_stage_name(name: str) -> str:
     return name.strip().replace(" ", "_").lower()
@@ -63,3 +65,54 @@ def setup_logging(
         logger.propagate = False
 
     return log_file
+
+
+def setup_pipeline_logging(
+    verbose: bool = False,
+    logs_dir: Optional[Path] = None,
+) -> Path:
+    """Configure a general pipeline lifecycle logger."""
+    level = logging.DEBUG if verbose else logging.INFO
+
+    logs_dir = ensure_logs_dir(logs_dir)
+    log_file = logs_dir / "pipeline.log"
+    rotate_log_on_date_change(log_file)
+
+    pipeline_logger = logging.getLogger(PIPELINE_LOGGER_NAME)
+    if pipeline_logger.handlers:
+        pipeline_logger.handlers.clear()
+
+    pipeline_logger.setLevel(level)
+    pipeline_logger.propagate = False
+
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(level)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(levelname)-8s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    pipeline_logger.addHandler(file_handler)
+
+    return log_file
+
+
+class stage_context:
+    """Context manager for stage lifecycle logging.""" 
+
+    def __init__(self, stage_name: str):
+        self.stage_name = _sanitize_stage_name(stage_name)
+        self.logger = logging.getLogger(PIPELINE_LOGGER_NAME)
+
+    def __enter__(self):
+        self.logger.info("START %s", self.stage_name)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        if exc_type is None:
+            self.logger.info("SUCCESS %s", self.stage_name)
+        else:
+            self.logger.error("FAIL %s: %s", self.stage_name, exc_value)
+        self.logger.info("END %s", self.stage_name)
+        return False
