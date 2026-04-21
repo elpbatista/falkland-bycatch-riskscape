@@ -7,17 +7,6 @@ from riskscape.logs import setup_logging, setup_pipeline_logging, stage_context
 
 logger = logging.getLogger(__name__)
 
-
-# def main():
-#     """Run grid conversion."""
-#     print("Converting grid to uint64...")
-#     convert_grid_to_uint64()
-#     print("Grid conversion complete.")
-
-
-# if __name__ == "__main__":
-#     main()
-
 def main() -> int:
     """Run grid conversion."""
     setup_logging(stage="convert_grid_to_uint64", verbose=True)
