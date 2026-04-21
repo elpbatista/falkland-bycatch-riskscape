@@ -23,6 +23,7 @@ paths:
   raw: "data/raw"
   processed: "data/processed"
   grids: "data/grids"
+  lookups: "data/lookups"
   layer1: "data/layer1"
   layer2: "data/layer2"
   models: "data/models"
