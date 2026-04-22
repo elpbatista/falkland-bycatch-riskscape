@@ -41,3 +41,5 @@ Gebco a global one arc-minute grid. Released: 2003, updated: 2008 On behalf of G
 <https://dataportal.saeri.org/dataset/gebco-bathymetry-one-minute-arc-grid>
 
 <https://www.gebco.net/data-products/gridded-bathymetry-data#area>
+
+## Global Fishing Watch fishing effort data
