@@ -120,3 +120,58 @@ Merge all variables into one table:
 - No per-year lookup tables
 - No assumptions about transformations before inspection
 - Dataset-specific logic limited to lookup and aggregation
+
+---
+
+## Preparation
+
+- Grid uint64
+- H3 neighbor table
+- H3 neighbor index table
+- Seasonal lookup table
+- Dataset-specific lookups
+
+## Spatial Framework
+
+- H3 grid (resolution 6)
+  - canonical representation: `uint64`
+  - centroid coordinates included
+
+- H3 neighbor table
+  - `h3`, `n1`…`n6` as `UInt64`
+  - exact, no precision loss
+
+- H3 neighbor index table
+  - `idx`, `n1`…`n6`
+  - integer adjacency structure
+  - `-1` for missing neighbors
+
+---
+
+## Temporal Framework
+
+- Seasonal lookup table
+  - `adjusted_doy`
+  - `doy_sin`, `doy_cos`
+  - 365-day cycle
+  - leap-year handled at mapping stage
+
+---
+
+## Data Access Layer
+
+- Dataset-specific lookups
+  - mapping from source grid → H3
+  - one per dataset
+  - deterministic and reusable
+
+---
+
+## Status
+
+All foundational components are now:
+
+- consistent (uint64 everywhere for H3)
+- deterministic (no runtime ambiguity)
+- reusable (lookups precomputed)
+- numerically stable (no float coercion issues)

@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
+import geopandas as gpd
 import h3
-import pandas as pd
 
 from riskscape.config import cfg, paths
 
 
 def convert_grid_to_uint64():
-    """Convert grid H3 ids to uint64 and save a new parquet file."""
+    """Convert grid H3 ids to uint64 and save a new GeoParquet file."""
     resolution = cfg["grid"]["resolution"]
     region_name = cfg["region"]["name"]
 
@@ -20,29 +20,29 @@ def convert_grid_to_uint64():
         raise FileNotFoundError(f"Grid not found: {input_path}")
 
     print("Loading grid:", input_file)
-    df = pd.read_parquet(input_path)
+    gdf = gpd.read_parquet(input_path)
 
-    if "h3_index" not in df.columns:
+    if "h3_index" not in gdf.columns:
         raise ValueError("Expected column 'h3_index' not found in grid")
 
-    df["h3_index"] = (
-        df["h3_index"]
+    gdf["h3_index"] = (
+        gdf["h3_index"]
         .astype(str)
         .map(h3.str_to_int)
         .astype("uint64")
     )
 
-    df = df.sort_values("h3_index").reset_index(drop=True)
+    gdf = gdf.sort_values("h3_index").reset_index(drop=True)
 
     output_file = f"h3_res{resolution}_{region_name}_uint64.parquet"
     output_path = Path(paths["grids"]) / output_file
 
-    df.to_parquet(output_path, index=False)
+    gdf.to_parquet(output_path, engine="pyarrow", index=False)
 
     print("Saved:", output_path)
-    print("Rows:", len(df))
-    print(df.dtypes)
-    print(df.head())
+    print("Rows:", len(gdf))
+    print(gdf.dtypes)
+    print(gdf.head())
 
 
 if __name__ == "__main__":

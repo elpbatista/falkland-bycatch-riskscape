@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 def build_h3_grid() -> None:
     """Create and save the H3 grid defined in config.yaml."""
-
     bbox = cfg["region"]["bbox"]
     buffer_km = cfg["region"]["buffer_km"]
 
@@ -61,23 +60,21 @@ def build_h3_grid() -> None:
             "geometry": geometry,
         })
 
-    gdf = gpd.GeoDataFrame(records, crs=cfg["region"]["crs"])
+    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=cfg["region"]["crs"])
+
     output_dir = paths["grids"]
     output_dir.mkdir(parents=True, exist_ok=True)
 
     region_name = cfg["region"]["name"]
     base_name = f"h3_res{resolution}_{region_name}"
 
-    geojson_file = output_dir / f"{base_name}.geojson"
-    gpkg_file = output_dir / f"{base_name}.gpkg"
     parquet_file = output_dir / f"{base_name}.parquet"
-
-    gdf.to_file(geojson_file, driver="GeoJSON")
-    gdf.to_file(gpkg_file, driver="GPKG")
     gdf.to_parquet(parquet_file, engine="pyarrow", index=False)
 
-    for fname in (geojson_file, parquet_file, gpkg_file):
-        logger.info(f"Grid saved: {fname}")
+    print(gdf.head())
+    print(gdf.crs)
+
+    logger.info("Grid saved: %s", parquet_file)
     logger.info("Hex cells: %d", len(gdf))
 
 
