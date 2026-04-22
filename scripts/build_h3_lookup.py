@@ -120,7 +120,6 @@ def build_lookup(dataset_name):
 
     ds.close()
 
-    # grid = load_grid()
     grid = load_grid(uint64=True)
     pixel_gdf = build_pixel_gdf(lats, lons)
     pixel_sindex = pixel_gdf.sindex
