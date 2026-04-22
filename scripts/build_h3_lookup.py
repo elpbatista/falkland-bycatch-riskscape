@@ -12,6 +12,7 @@ from shapely.geometry import box
 
 from riskscape.config import cfg
 
+from riskscape.grid import load_grid
 
 GEOD = pyproj.Geod(ellps="WGS84")
 
@@ -107,28 +108,28 @@ def geodesic_area_m2(geom):
     return abs(area)
 
 
-def load_grid():
-    """Load canonical uint64 grid as GeoParquet."""
-    resolution = int(cfg["grid"]["resolution"])
-    region_name = cfg["region"]["name"]
+# def load_grid():
+#     """Load canonical uint64 grid as GeoParquet."""
+#     resolution = int(cfg["grid"]["resolution"])
+#     region_name = cfg["region"]["name"]
 
-    grid_file = f"h3_res{resolution}_{region_name}_uint64.parquet"
-    grid_path = Path(cfg["paths"]["grids"]) / grid_file
+#     grid_file = f"h3_res{resolution}_{region_name}_uint64.parquet"
+#     grid_path = Path(cfg["paths"]["grids"]) / grid_file
 
-    if not grid_path.exists():
-        raise FileNotFoundError(f"Grid not found: {grid_path}")
+#     if not grid_path.exists():
+#         raise FileNotFoundError(f"Grid not found: {grid_path}")
 
-    grid = gpd.read_parquet(grid_path)
+#     grid = gpd.read_parquet(grid_path)
 
-    required = {"h3_index", "geometry"}
-    missing = required - set(grid.columns)
-    if missing:
-        raise ValueError(f"Grid schema invalid, missing: {missing}")
+#     required = {"h3_index", "geometry"}
+#     missing = required - set(grid.columns)
+#     if missing:
+#         raise ValueError(f"Grid schema invalid, missing: {missing}")
 
-    if grid["h3_index"].dtype != "uint64":
-        raise TypeError("h3_index must be uint64")
+#     if grid["h3_index"].dtype != "uint64":
+#         raise TypeError("h3_index must be uint64")
 
-    return grid[["h3_index", "geometry"]].copy()
+#     return grid[["h3_index", "geometry"]].copy()
 
 
 def build_lookup(dataset_name):
@@ -143,7 +144,8 @@ def build_lookup(dataset_name):
 
     ds.close()
 
-    grid = load_grid()
+    # grid = load_grid()
+    grid = load_grid(uint64=True)
     pixel_gdf = build_pixel_gdf(lats, lons)
     pixel_sindex = pixel_gdf.sindex
 
