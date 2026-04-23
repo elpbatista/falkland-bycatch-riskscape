@@ -10,9 +10,9 @@ import pyproj
 import xarray as xr
 from shapely.geometry import box
 
-from riskscape.config import cfg
-
+from riskscape.config import cfg, paths
 from riskscape.grid import load_grid
+
 
 GEOD = pyproj.Geod(ellps="WGS84")
 
@@ -30,31 +30,24 @@ def detect_coords(ds):
 
 def open_reference_raster(dataset_name):
     """Open one reference dataset for lookup construction."""
-    raw_dir = Path(cfg["paths"]["raw"])
-    dataset_dir = raw_dir / dataset_name
+    dataset_dir = paths["raw"] / dataset_name
 
-    if dataset_name == "wind":
-        zips = sorted(dataset_dir.glob("*.zip"))
-
-        if not zips:
-            raise RuntimeError("No wind ZIP files found")
-
-        zip_path = zips[0]
-
-        with zipfile.ZipFile(zip_path) as z:
-            nc_name = [n for n in z.namelist() if "u_component" in n][0]
-
-            with z.open(nc_name) as f:
-                ds = xr.open_dataset(f).load()
-
-        return ds
-
+    # Prefer direct NetCDF
     files = sorted(dataset_dir.glob("*.nc"))
+    if files:
+        return xr.open_dataset(files[0])
 
-    if not files:
-        raise RuntimeError(f"No raster files found for {dataset_name}")
+    # Fallback: zipped NetCDF
+    zips = sorted(dataset_dir.glob("*.zip"))
+    if zips:
+        with zipfile.ZipFile(zips[0]) as z:
+            nc_files = [n for n in z.namelist() if n.endswith(".nc")]
+            if not nc_files:
+                return None
+            with z.open(nc_files[0]) as f:
+                return xr.open_dataset(f).load()
 
-    return xr.open_dataset(files[0])
+    return None
 
 
 def pixel_size(coords):
@@ -86,7 +79,7 @@ def build_pixel_gdf(lats, lons):
         for lat, lon in zip(lat_flat, lon_flat)
     ]
 
-    pixel_gdf = gpd.GeoDataFrame(
+    return gpd.GeoDataFrame(
         {
             "pixel": pixel_ids,
             "lat_idx": (pixel_ids // n_lon).astype(np.uint32),
@@ -95,8 +88,6 @@ def build_pixel_gdf(lats, lons):
         geometry=geometries,
         crs="EPSG:4326",
     )
-
-    return pixel_gdf
 
 
 def geodesic_area_m2(geom):
@@ -113,11 +104,14 @@ def build_lookup(dataset_name):
     print("Building lookup:", dataset_name)
 
     ds = open_reference_raster(dataset_name)
+    if ds is None:
+        print("Skipping:", dataset_name, "(no raster reference found)")
+        print()
+        return
 
     lat_name, lon_name = detect_coords(ds)
     lats = ds[lat_name].values
     lons = ds[lon_name].values
-
     ds.close()
 
     grid = load_grid(uint64=True)
@@ -126,9 +120,8 @@ def build_lookup(dataset_name):
 
     rows = []
 
-    for h3_value, h3_geom in zip(grid["h3_index"], grid.geometry):
+    for h3_value, h3_geom in zip(grid["h3"], grid.geometry):
         candidate_idx = list(pixel_sindex.intersection(h3_geom.bounds))
-
         if not candidate_idx:
             continue
 
@@ -137,12 +130,10 @@ def build_lookup(dataset_name):
 
         for pixel_id, pixel_geom in zip(candidates["pixel"], candidates.geometry):
             inter = h3_geom.intersection(pixel_geom)
-
             if inter.is_empty:
                 continue
 
             overlap_m2 = geodesic_area_m2(inter)
-
             if overlap_m2 <= 0:
                 continue
 
@@ -173,10 +164,10 @@ def build_lookup(dataset_name):
     lookup["overlap_m2"] = lookup["overlap_m2"].astype("float64")
     lookup["weight"] = lookup["weight"].astype("float32")
 
-    lookup_dir = Path(cfg["paths"]["data"]) / "processed"
-    lookup_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = paths["processed"]
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_file = lookup_dir / f"{dataset_name}_lookup.parquet"
+    out_file = out_dir / f"{dataset_name}_lookup.parquet"
     lookup.to_parquet(out_file, index=False)
 
     print("grid cells:", len(grid))
