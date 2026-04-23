@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from riskscape.config import cfg
-from riskscape.providers import get_provider
+from riskscape.downloads.providers import get_provider
 
 
 def main():

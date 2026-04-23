@@ -11,26 +11,9 @@ import pandas as pd
 
 from riskscape.config import cfg, paths
 from riskscape.grid import get_buffered_polygon_geojson
-
+from riskscape.downloads.common import build_year_ranges
 
 logger = logging.getLogger(__name__)
-
-
-def build_year_ranges(start_date: str, end_date: str):
-    """Yield yearly ranges."""
-    start = pd.Timestamp(start_date)
-    end = pd.Timestamp(end_date)
-
-    for year in range(start.year, end.year + 1):
-        y0 = pd.Timestamp(year=year, month=1, day=1)
-        y1 = pd.Timestamp(year=year, month=12, day=31)
-
-        s = max(start, y0)
-        e = min(end, y1)
-
-        if s <= e:
-            yield year, s.strftime("%Y-%m-%d"), e.strftime("%Y-%m-%d")
-
 
 async def fetch_with_retry(
     client,
@@ -89,6 +72,18 @@ async def async_main() -> None:
         "gear_type",
         "vessel_id",
         "vessel_type",
+        # "detections",
+        # "vessel_ids",
+        # "entry_timestamp",
+        # "exit_timestamp",
+        # "first_transmission_date",
+        # "last_transmission_date",
+        # "imo",
+        # "mmsi",
+        # "call_sign",
+        # "dataset",
+        # "report_dataset",
+        # "ship_name",
     ]
 
     for i, (year, start_date, end_date) in enumerate(year_ranges):
@@ -140,6 +135,7 @@ async def async_main() -> None:
 
 
 def main() -> None:
+    """Run GFW fishing effort download."""
     asyncio.run(async_main())
 
 

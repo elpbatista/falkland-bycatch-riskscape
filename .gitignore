@@ -44,7 +44,17 @@ Thumbs.db
 *.swo
 
 # Project-specific
-/logs/
-!*/logs/
+
+# Ignore data outputs
 data/
+*.parquet
+*.nc
+*.zip
+logs/
 */dev/
+
+# Keep
+!src/
+!src/riskscape/
+!src/riskscape/downloads/
+!*/logs/

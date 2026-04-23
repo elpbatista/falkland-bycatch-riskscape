@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 
 from riskscape.config import cfg
 from riskscape.logs import setup_logging, setup_pipeline_logging, stage_context
-from riskscape.providers import get_provider
+from riskscape.downloads.providers import get_provider
 
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ import importlib
 
 def get_provider(name):
     """Load a provider module by its name."""
-    module_name = f"riskscape.providers.{name}"
+    module_name = f"{__name__}.{name}"
 
     try:
         return importlib.import_module(module_name)
