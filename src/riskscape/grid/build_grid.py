@@ -27,7 +27,7 @@ def build_h3_grid() -> None:
         lat, lon = h3.cell_to_latlng(cell)
 
         records.append({
-            "h3_index": cell,
+            "h3": cell,
             "lat": lat,
             "lon": lon,
             "geometry": geometry,

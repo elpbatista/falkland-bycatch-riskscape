@@ -22,17 +22,17 @@ def convert_grid_to_uint64():
     print("Loading grid:", input_file)
     gdf = gpd.read_parquet(input_path)
 
-    if "h3_index" not in gdf.columns:
-        raise ValueError("Expected column 'h3_index' not found in grid")
+    if "h3" not in gdf.columns:
+        raise ValueError("Expected column 'h3' not found in grid")
 
-    gdf["h3_index"] = (
-        gdf["h3_index"]
+    gdf["h3"] = (
+        gdf["h3"]
         .astype(str)
         .map(h3.str_to_int)
         .astype("uint64")
     )
 
-    gdf = gdf.sort_values("h3_index").reset_index(drop=True)
+    gdf = gdf.sort_values("h3").reset_index(drop=True)
 
     output_file = f"h3_res{resolution}_{region_name}_uint64.parquet"
     output_path = Path(paths["grids"]) / output_file

@@ -21,7 +21,7 @@ def load_grid(uint64: bool = False) -> gpd.GeoDataFrame:
 
     grid = gpd.read_parquet(grid_path)
 
-    required = {"h3_index", "lat", "lon", "geometry"}
+    required = {"h3", "lat", "lon", "geometry"}
     missing = required - set(grid.columns)
     if missing:
         raise ValueError(f"Grid schema invalid, missing: {missing}")
