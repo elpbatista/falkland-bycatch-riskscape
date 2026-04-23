@@ -32,7 +32,7 @@ def build_seasonal_lookup():
         }
     )
 
-    out_dir = paths["lookups"]
+    out_dir = paths["processed"]
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = out_dir / "seasonal_lookup.parquet"

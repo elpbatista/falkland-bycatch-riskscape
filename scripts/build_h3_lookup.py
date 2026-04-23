@@ -173,7 +173,7 @@ def build_lookup(dataset_name):
     lookup["overlap_m2"] = lookup["overlap_m2"].astype("float64")
     lookup["weight"] = lookup["weight"].astype("float32")
 
-    lookup_dir = Path(cfg["paths"]["data"]) / "lookups"
+    lookup_dir = Path(cfg["paths"]["data"]) / "processed"
     lookup_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = lookup_dir / f"{dataset_name}_lookup.parquet"
