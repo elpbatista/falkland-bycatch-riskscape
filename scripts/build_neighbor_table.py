@@ -20,10 +20,10 @@ def build_neighbor_table():
     print("Loading grid:", grid_file)
     grid = pd.read_parquet(grid_path)
 
-    if "h3_index" not in grid.columns:
-        raise ValueError("Expected column 'h3_index' not found in grid")
+    if "h3" not in grid.columns:
+        raise ValueError("Expected column 'h3' not found in grid")
 
-    h3_cells = grid["h3_index"].astype("uint64").tolist()
+    h3_cells = grid["h3"].astype("uint64").tolist()
     h3_set = set(int(h) for h in h3_cells)
 
     h3_values = []

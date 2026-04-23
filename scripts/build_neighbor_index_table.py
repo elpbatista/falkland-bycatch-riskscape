@@ -18,13 +18,13 @@ def build_index_table():
 
     grid = pd.read_parquet(grid_path)
 
-    if "h3_index" not in grid.columns:
-        raise ValueError("Expected column 'h3_index' not found in grid")
+    if "h3" not in grid.columns:
+        raise ValueError("Expected column 'h3' not found in grid")
 
-    grid["h3_index"] = grid["h3_index"].astype("uint64")
-    grid = grid.sort_values("h3_index").reset_index(drop=True)
+    grid["h3"] = grid["h3"].astype("uint64")
+    grid = grid.sort_values("h3").reset_index(drop=True)
 
-    index_map = {int(h): i for i, h in enumerate(grid["h3_index"].tolist())}
+    index_map = {int(h): i for i, h in enumerate(grid["h3"].tolist())}
 
     neighbor_path = Path(paths["processed"]) / "h3_neighbors.parquet"
     if not neighbor_path.exists():
