@@ -9,11 +9,13 @@ from pathlib import Path
 import gfwapiclient as gfw
 import pandas as pd
 
-from riskscape.config import cfg, paths
-from riskscape.grid import get_buffered_polygon_geojson
+from riskscape.config import cfg
 from riskscape.downloads.common import build_year_ranges
+from riskscape.grid import get_buffered_polygon_geojson
+
 
 logger = logging.getLogger(__name__)
+
 
 async def fetch_with_retry(
     client,
@@ -25,7 +27,9 @@ async def fetch_with_retry(
     """Fetch one yearly fishing-effort report with retry."""
     for attempt in range(1, max_attempts + 1):
         try:
-            result = await client.fourwings.create_fishing_effort_report(**payload)
+            result = await client.fourwings.create_fishing_effort_report(
+                **payload
+            )
             return result.df()
 
         except Exception as exc:
@@ -49,8 +53,8 @@ async def fetch_with_retry(
     raise RuntimeError("Retry loop ended unexpectedly")
 
 
-async def async_main() -> None:
-    """Download and store fishing effort as Parquet."""
+async def _async_download(dataset_dir: Path) -> None:
+    """Async download implementation."""
     token = cfg["gfw"]["token"]
     if not token:
         raise RuntimeError("Missing GFW token in config.yaml")
@@ -58,10 +62,11 @@ async def async_main() -> None:
     client = gfw.Client(access_token=token)
     geojson = get_buffered_polygon_geojson()
 
-    out_root = Path(paths["raw"]) / "fishing_effort"
-    out_root.mkdir(parents=True, exist_ok=True)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
 
-    year_ranges = list(build_year_ranges(cfg["time"]["start"], cfg["time"]["end"]))
+    year_ranges = list(
+        build_year_ranges(cfg["time"]["start"], cfg["time"]["end"])
+    )
 
     keep = [
         "date",
@@ -87,7 +92,7 @@ async def async_main() -> None:
     ]
 
     for i, (year, start_date, end_date) in enumerate(year_ranges):
-        year_dir = out_root / f"year={year}"
+        year_dir = dataset_dir / f"year={year}"
         year_dir.mkdir(parents=True, exist_ok=True)
 
         out_file = year_dir / "fishing_effort.parquet"
@@ -112,11 +117,15 @@ async def async_main() -> None:
             else:
                 missing = [c for c in keep if c not in df.columns]
                 if missing:
-                    raise ValueError(f"{year} missing expected columns: {missing}")
+                    raise ValueError(
+                        f"{year} missing expected columns: {missing}"
+                    )
 
                 df = df[keep].copy()
 
-                df["date"] = pd.to_datetime(df["date"], utc=True).astype("int64")
+                df["date"] = pd.to_datetime(
+                    df["date"], utc=True
+                ).astype("int64")
                 df["hours"] = df["hours"].astype("float32")
                 df["lat"] = df["lat"].astype("float32")
                 df["lon"] = df["lon"].astype("float32")
@@ -134,10 +143,6 @@ async def async_main() -> None:
     logger.info("Download completed")
 
 
-def main() -> None:
-    """Run GFW fishing effort download."""
-    asyncio.run(async_main())
-
-
-if __name__ == "__main__":
-    main()
+def download(ds: dict, dataset_dir: Path) -> None:
+    """Provider entry point (called by download_data.py)."""
+    asyncio.run(_async_download(dataset_dir))

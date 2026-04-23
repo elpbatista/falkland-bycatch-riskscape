@@ -1,25 +1,17 @@
 """Download datasets defined in config.
 
 Usage examples:
-    # Download all datasets
     python scripts/download_data.py
-
-    # Download specific datasets
     python scripts/download_data.py --dataset wind chl sst
     python scripts/download_data.py --dataset wind
-
-    # Clean and re-download
     python scripts/download_data.py --clean --dataset wind chl
-    python scripts/download_data.py --clean  # clean all
-
-    # Enable verbose logging
+    python scripts/download_data.py --clean
     python scripts/download_data.py --verbose
     python scripts/download_data.py --dataset wind chl -v
-
-    # Combine all options
     python scripts/download_data.py --clean --dataset wind chl sst --verbose
 
-Logs are written to the project root `logs/` directory, using a stage-specific log file.
+Logs are written to the project root `logs/` directory, using a
+stage-specific log file.
 """
 
 import argparse
@@ -27,11 +19,12 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from riskscape.config import cfg
+from riskscape.config import cfg, paths
+from riskscape.downloads.providers.loader import get_provider
 from riskscape.logs import setup_logging, setup_pipeline_logging, stage_context
-from riskscape.downloads.providers import get_provider
+
 
 
 logger = logging.getLogger(__name__)
@@ -48,21 +41,31 @@ def validate_dataset_config(datasets: Dict) -> bool:
 def validate_datasets_exist(names: List[str], datasets: Dict) -> bool:
     """Validate that specific datasets exist in config."""
     invalid_names = [name for name in names if name not in datasets]
-    
+
     if invalid_names:
-        logger.error(f"Datasets not found: {', '.join(invalid_names)}")
-        logger.info(f"Available datasets: {', '.join(datasets.keys())}")
+        logger.error("Datasets not found: %s", ", ".join(invalid_names))
+        logger.info("Available datasets: %s", ", ".join(datasets.keys()))
         return False
+
     return True
 
 
 def validate_provider(name: str, provider_name: str) -> bool:
-    """Validate that a provider can be instantiated."""
+    """Validate that a provider can be loaded."""
+    if not provider_name:
+        logger.error("Dataset '%s' does not define a provider", name)
+        return False
+
     try:
         get_provider(provider_name)
         return True
-    except Exception as e:
-        logger.error(f"Invalid provider '{provider_name}' for dataset '{name}': {e}")
+    except Exception as exc:
+        logger.error(
+            "Invalid provider '%s' for dataset '%s': %s",
+            provider_name,
+            name,
+            exc,
+        )
         return False
 
 
@@ -70,33 +73,30 @@ def clean_dataset_folder(dataset_dir: Path) -> bool:
     """Remove a dataset directory if it exists."""
     try:
         if dataset_dir.exists():
-            logger.debug(f"Removing: {dataset_dir}")
+            logger.debug("Removing: %s", dataset_dir)
             shutil.rmtree(dataset_dir)
-            return True
-    except Exception as e:
-        logger.error(f"Failed to remove {dataset_dir}: {e}")
+        return True
+    except Exception as exc:
+        logger.error("Failed to remove %s: %s", dataset_dir, exc)
         return False
-    return True
 
 
 def download_dataset(name: str, ds: Dict, dataset_dir: Path) -> bool:
     """Download a single dataset."""
     try:
         provider = get_provider(ds["provider"])
-        logger.info(f"Downloading: {name}")
+        logger.info("Downloading: %s", name)
         provider.download(ds, dataset_dir)
-        logger.info(f"Successfully downloaded: {name}")
+        logger.info("Successfully downloaded: %s", name)
         return True
-    except Exception as e:
-        logger.error(f"Failed to download '{name}': {e}")
+    except Exception as exc:
+        logger.error("Failed to download '%s': %s", name, exc)
         return False
 
 
 def main() -> int:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Download project datasets"
-    )
+    parser = argparse.ArgumentParser(description="Download project datasets")
 
     parser.add_argument(
         "--clean",
@@ -108,7 +108,10 @@ def main() -> int:
         "--dataset",
         type=str,
         nargs="+",
-        help="Download specific datasets (e.g. wind chl sst). If not specified, downloads all.",
+        help=(
+            "Download specific datasets (e.g. wind chl sst). "
+            "If not specified, downloads all."
+        ),
     )
 
     parser.add_argument(
@@ -119,43 +122,44 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+
     setup_logging(stage="download_data", verbose=args.verbose)
     setup_pipeline_logging(verbose=args.verbose)
 
     with stage_context("download_data"):
-        # Validate configuration
         datasets = cfg.get("datasets")
         if not validate_dataset_config(datasets):
             return 1
 
-        # Validate dataset filter if provided
         if args.dataset and not validate_datasets_exist(args.dataset, datasets):
             return 1
 
-        raw_dir = Path(cfg["paths"]["raw"])
+        raw_dir = paths["raw"]
         raw_dir.mkdir(parents=True, exist_ok=True)
 
-        # Determine which datasets to process
         target_datasets = args.dataset if args.dataset else list(datasets.keys())
 
-        # Optional cleaning step
         if args.clean:
             logger.info("Cleaning dataset folders")
             clean_count = 0
+
             for name in target_datasets:
                 dataset_dir = raw_dir / name
                 if clean_dataset_folder(dataset_dir):
                     clean_count += 1
-            logger.info(f"Cleaned {clean_count}/{len(target_datasets)} dataset folders")
 
-        # Download datasets
+            logger.info(
+                "Cleaned %d/%d dataset folders",
+                clean_count,
+                len(target_datasets),
+            )
+
         download_count = 0
         failed_datasets: List[str] = []
 
         for name in target_datasets:
             ds = datasets[name]
 
-            # Validate provider before attempting download
             if not validate_provider(name, ds.get("provider")):
                 failed_datasets.append(name)
                 continue
@@ -166,11 +170,14 @@ def main() -> int:
             else:
                 failed_datasets.append(name)
 
-        # Summary
-        logger.info(f"Download summary: {download_count}/{len(target_datasets)} successful")
+        logger.info(
+            "Download summary: %d/%d successful",
+            download_count,
+            len(target_datasets),
+        )
 
         if failed_datasets:
-            logger.warning(f"Failed datasets: {', '.join(failed_datasets)}")
+            logger.warning("Failed datasets: %s", ", ".join(failed_datasets))
             return 1
 
         return 0

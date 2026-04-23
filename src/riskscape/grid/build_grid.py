@@ -1,147 +1,59 @@
-"""Download fishing effort data (year-partitioned) from GFW 4Wings API."""
+"""H3 grid utilities for the riskscape package."""
 
-from __future__ import annotations
-
-import asyncio
 import logging
-from pathlib import Path
 
-import gfwapiclient as gfw
-import pandas as pd
+import geopandas as gpd
+import h3
+from shapely.geometry import Polygon
 
 from riskscape.config import cfg, paths
-from riskscape.grid import get_buffered_polygon_geojson
-
+from .extent import get_buffered_polygon_geojson
 
 logger = logging.getLogger(__name__)
 
 
-def build_year_ranges(start_date: str, end_date: str):
-    """Yield yearly ranges."""
-    start = pd.Timestamp(start_date)
-    end = pd.Timestamp(end_date)
+def build_h3_grid() -> None:
+    """Create and save the H3 grid defined in config.yaml."""
 
-    for year in range(start.year, end.year + 1):
-        y0 = pd.Timestamp(year=year, month=1, day=1)
-        y1 = pd.Timestamp(year=year, month=12, day=31)
+    polygon = get_buffered_polygon_geojson()
+    resolution = cfg["grid"]["resolution"]
+    shape = h3.geo_to_h3shape(polygon)
+    cells = h3.h3shape_to_cells(shape, resolution)
 
-        s = max(start, y0)
-        e = min(end, y1)
+    records = []
+    for cell in cells:
+        boundary = h3.cell_to_boundary(cell)
+        geometry = Polygon([(lon, lat) for lat, lon in boundary])
+        lat, lon = h3.cell_to_latlng(cell)
 
-        if s <= e:
-            yield year, s.strftime("%Y-%m-%d"), e.strftime("%Y-%m-%d")
+        records.append({
+            "h3_index": cell,
+            "lat": lat,
+            "lon": lon,
+            "geometry": geometry,
+        })
 
+    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=cfg["region"]["crs"])
 
-async def fetch_with_retry(
-    client,
-    payload: dict,
-    year: int,
-    max_attempts: int = 5,
-    base_sleep: float = 10.0,
-) -> pd.DataFrame:
-    """Fetch one yearly fishing-effort report with retry."""
-    for attempt in range(1, max_attempts + 1):
-        try:
-            result = await client.fourwings.create_fishing_effort_report(**payload)
-            return result.df()
+    output_dir = paths["grids"]
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-        except Exception as exc:
-            is_last = attempt == max_attempts
-            wait_s = base_sleep * attempt
+    region_name = cfg["region"]["name"]
+    base_name = f"h3_res{resolution}_{region_name}"
 
-            logger.warning(
-                "%s request failed (attempt %d/%d): %s",
-                year,
-                attempt,
-                max_attempts,
-                exc,
-            )
+    parquet_file = output_dir / f"{base_name}.parquet"
+    gdf.to_parquet(parquet_file, engine="pyarrow", index=False)
 
-            if is_last:
-                raise
+    print(gdf.head())
+    print(gdf.crs)
 
-            logger.info("%s retrying in %.1fs", year, wait_s)
-            await asyncio.sleep(wait_s)
-
-    raise RuntimeError("Retry loop ended unexpectedly")
+    logger.info("Grid saved: %s", parquet_file)
+    logger.info("Hex cells: %d", len(gdf))
 
 
-async def async_main() -> None:
-    """Download and store fishing effort as Parquet."""
-    token = cfg["gfw"]["token"]
-    if not token:
-        raise RuntimeError("Missing GFW token in config.yaml")
-
-    client = gfw.Client(access_token=token)
-    geojson = get_buffered_polygon_geojson()
-
-    out_root = Path(paths["raw"]) / "fishing_effort"
-    out_root.mkdir(parents=True, exist_ok=True)
-
-    year_ranges = list(build_year_ranges(cfg["time"]["start"], cfg["time"]["end"]))
-
-    keep = [
-        "date",
-        "hours",
-        "lat",
-        "lon",
-        "flag",
-        "gear_type",
-        "vessel_id",
-        "vessel_type",
-    ]
-
-    for i, (year, start_date, end_date) in enumerate(year_ranges):
-        year_dir = out_root / f"year={year}"
-        year_dir.mkdir(parents=True, exist_ok=True)
-
-        out_file = year_dir / "fishing_effort.parquet"
-
-        if out_file.exists():
-            logger.info("%s skipped (already exists)", year)
-        else:
-            logger.info("%s downloading (%s -> %s)", year, start_date, end_date)
-
-            payload = {
-                "spatial_resolution": "HIGH",
-                "temporal_resolution": "DAILY",
-                "start_date": start_date,
-                "end_date": end_date,
-                "geojson": geojson,
-            }
-
-            df = await fetch_with_retry(client, payload, year=year)
-
-            if df.empty:
-                logger.info("%s empty", year)
-            else:
-                missing = [c for c in keep if c not in df.columns]
-                if missing:
-                    raise ValueError(f"{year} missing expected columns: {missing}")
-
-                df = df[keep].copy()
-
-                df["date"] = pd.to_datetime(df["date"], utc=True).astype("int64")
-                df["hours"] = df["hours"].astype("float32")
-                df["lat"] = df["lat"].astype("float32")
-                df["lon"] = df["lon"].astype("float32")
-
-                df = df.drop_duplicates().reset_index(drop=True)
-                df.to_parquet(out_file, index=False)
-
-                logger.info("%s saved (%d rows)", year, len(df))
-
-        if i < len(year_ranges) - 1:
-            delay = cfg["gfw"].get("request_delay_seconds", 60)
-            logger.info("Waiting %ds before next request", delay)
-            await asyncio.sleep(delay)
-
-    logger.info("Download completed")
-
-
-def main() -> None:
-    asyncio.run(async_main())
+def _main() -> None:
+    build_h3_grid()
 
 
 if __name__ == "__main__":
-    main()
+    _main()
