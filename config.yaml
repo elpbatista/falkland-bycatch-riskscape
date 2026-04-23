@@ -29,12 +29,13 @@ paths:
   models: "data/models"
   logs: "logs"
   plots: "plots"
+  reference: "reference"
 
 references:
-  land: "data/reference/ne_10m_land/ne_10m_land.shp"
-  coastline: "data/reference/ne_10m_coastline/ne_10m_coastline.shp"
-  fisheries: "data/reference/fisheries_grid_squares/GridSquares.shp"
-  limits: "data/reference/ukho_ficz_focz_limits/ukho_ficz_focz_limits.shp"
+  land: "reference/ne_10m_land/ne_10m_land.shp"
+  coastline: "reference/ne_10m_coastline/ne_10m_coastline.shp"
+  fisheries: "reference/fisheries_grid_squares/GridSquares.shp"
+  limits: "reference/ukho_ficz_focz_limits/ukho_ficz_focz_limits.shp"
 
 datasets:
   sst:
@@ -61,7 +62,7 @@ datasets:
 
   gfw:
     provider: gfw
-    
+
 downloads:
   workers: 8
 
