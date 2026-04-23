@@ -1,6 +1,5 @@
 """H3 grid utilities for the riskscape package."""
 
-import math
 import logging
 
 import geopandas as gpd
@@ -8,41 +7,15 @@ import h3
 from shapely.geometry import Polygon
 
 from riskscape.config import cfg, paths
+from .extent import get_buffered_polygon_geojson
 
 logger = logging.getLogger(__name__)
 
 
 def build_h3_grid() -> None:
     """Create and save the H3 grid defined in config.yaml."""
-    bbox = cfg["region"]["bbox"]
-    buffer_km = cfg["region"]["buffer_km"]
 
-    xmin = bbox["xmin"]
-    ymin = bbox["ymin"]
-    xmax = bbox["xmax"]
-    ymax = bbox["ymax"]
-
-    mid_lat = (ymin + ymax) / 2
-
-    dlat = buffer_km / 111.0
-    dlon = buffer_km / (111.0 * math.cos(math.radians(mid_lat)))
-
-    xmin -= dlon
-    xmax += dlon
-    ymin -= dlat
-    ymax += dlat
-
-    polygon = {
-        "type": "Polygon",
-        "coordinates": [[
-            [xmin, ymin],
-            [xmax, ymin],
-            [xmax, ymax],
-            [xmin, ymax],
-            [xmin, ymin],
-        ]],
-    }
-
+    polygon = get_buffered_polygon_geojson()
     resolution = cfg["grid"]["resolution"]
     shape = h3.geo_to_h3shape(polygon)
     cells = h3.h3shape_to_cells(shape, resolution)
