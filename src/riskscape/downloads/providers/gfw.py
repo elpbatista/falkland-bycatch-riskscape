@@ -17,6 +17,14 @@ from riskscape.grid import get_buffered_polygon_geojson
 logger = logging.getLogger(__name__)
 
 
+def api_end_date(end_date: str) -> str:
+    """Return exclusive API end date."""
+    return (
+        pd.Timestamp(end_date)
+        + pd.Timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+
+
 async def fetch_with_retry(
     client,
     payload: dict,
@@ -100,13 +108,20 @@ async def _async_download(dataset_dir: Path) -> None:
         if out_file.exists():
             logger.info("%s skipped (already exists)", year)
         else:
-            logger.info("%s downloading (%s -> %s)", year, start_date, end_date)
+            request_end_date = api_end_date(end_date)
+
+            logger.info(
+                "%s downloading (%s -> %s)",
+                year,
+                start_date,
+                request_end_date,
+            )
 
             payload = {
                 "spatial_resolution": "HIGH",
                 "temporal_resolution": "DAILY",
                 "start_date": start_date,
-                "end_date": end_date,
+                "end_date": request_end_date,
                 "geojson": geojson,
             }
 
@@ -124,7 +139,8 @@ async def _async_download(dataset_dir: Path) -> None:
                 df = df[keep].copy()
 
                 df["date"] = pd.to_datetime(
-                    df["date"], utc=True
+                    df["date"],
+                    utc=True,
                 ).astype("int64")
                 df["hours"] = df["hours"].astype("float32")
                 df["lat"] = df["lat"].astype("float32")
@@ -144,5 +160,5 @@ async def _async_download(dataset_dir: Path) -> None:
 
 
 def download(ds: dict, dataset_dir: Path) -> None:
-    """Provider entry point (called by download_data.py)."""
+    """Provider entry point."""
     asyncio.run(_async_download(dataset_dir))
