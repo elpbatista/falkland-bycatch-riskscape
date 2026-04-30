@@ -12,6 +12,7 @@ FEATURE_TABLES = {
     "environmental": paths["data"] / "features" / "environmental",
     "fishing_effort": paths["data"] / "features" / "fishing_effort",
     "species_presence": paths["data"] / "features" / "species_presence",
+    "static": paths["data"] / "features" / "static",
 }
 
 
