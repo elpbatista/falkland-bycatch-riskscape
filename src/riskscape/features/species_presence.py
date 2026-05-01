@@ -79,7 +79,7 @@ def clean_telemetry(df: pd.DataFrame) -> pd.DataFrame:
 
     out = out.dropna(subset=["timestamp", "lat", "lon"]).reset_index(drop=True)
 
-    out["date"] = out["timestamp"].dt.floor("D").astype("int64")
+    out["date"] = out["timestamp"].dt.floor("D")
     out["lat"] = out["lat"].astype("float32")
     out["lon"] = out["lon"].astype("float32")
     out["species"] = out["species"].astype("string")
@@ -130,7 +130,7 @@ def aggregate_to_h3(
     )
 
     out["h3"] = out["h3"].astype("uint64")
-    out["date"] = out["date"].astype("int64")
+    out["date"] = pd.to_datetime(out["date"], utc=True)
     out["species"] = out["species"].astype("string")
     out["presence_count"] = out["presence_count"].astype("uint16")
     out["individual_count"] = out["individual_count"].astype("uint16")
@@ -162,11 +162,7 @@ def build_species_presence_features() -> list[Path]:
         logger.info("No species presence records intersected the grid")
         return []
 
-    features["year"] = (
-        pd.to_datetime(features["date"], utc=True)
-        .dt.year
-        .astype("int16")
-    )
+    features["year"] = features["date"].dt.year.astype("int16")
 
     outputs = []
 

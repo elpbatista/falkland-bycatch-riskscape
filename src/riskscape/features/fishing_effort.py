@@ -89,7 +89,7 @@ def aggregate_to_h3(df: pd.DataFrame, grid: gpd.GeoDataFrame) -> pd.DataFrame:
     )
 
     out["h3"] = out["h3"].astype("uint64")
-    out["date"] = out["date"].astype("int64")
+    out["date"] = pd.to_datetime(out["date"], utc=True)
     out["fishing_hours"] = out["fishing_hours"].astype("float32")
     out["vessel_count"] = out["vessel_count"].astype("uint16")
 

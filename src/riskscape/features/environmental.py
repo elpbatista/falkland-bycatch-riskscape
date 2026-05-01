@@ -103,7 +103,8 @@ def feature_name(dataset_name, variable_name, configured):
     return dataset_name
 
 
-def timestamp_ns(value):
+def timestamp_utc_day(value):
+    """Return UTC-normalized daily timestamp."""
     ts = pd.Timestamp(value)
 
     if ts.tzinfo is None:
@@ -111,7 +112,7 @@ def timestamp_ns(value):
     else:
         ts = ts.tz_convert("UTC")
 
-    return int(ts.floor("D").value)
+    return ts.floor("D")
 
 
 def aggregate_slice(values, lookup, col):
@@ -153,7 +154,7 @@ def aggregate_variable(ds, lookup, dataset_name, variable_name):
         values = da.isel({time: i}).values
 
         df = aggregate_slice(values, lookup, col)
-        df["date"] = timestamp_ns(t)
+        df["date"] = timestamp_utc_day(t)
 
         frames.append(df[["h3", "date", col]])
 
@@ -209,7 +210,7 @@ def merge_frames(frames):
     )
 
     df["h3"] = df["h3"].astype("uint64")
-    df["date"] = df["date"].astype("int64")
+    df["date"] = pd.to_datetime(df["date"], utc=True)
 
     for c in feature_cols:
         df[c] = df[c].astype("float32")

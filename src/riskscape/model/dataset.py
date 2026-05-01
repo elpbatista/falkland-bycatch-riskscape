@@ -1,0 +1,274 @@
+"""Build model-ready datasets."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+
+from riskscape.config import paths
+
+
+DYNAMIC_FEATURES = [
+    "sst",
+    "ssh",
+    "wind_speed",
+    "chl_log",
+    "sst_anom",
+    "ssh_anom",
+    "wind_speed_anom",
+    "chl_log_anom",
+    "sst_grad",
+    "ssh_grad",
+    "chl_log_grad",
+    "doy_sin",
+    "doy_cos",
+]
+
+STATIC_FEATURES = [
+    "depth_m",
+    "slope",
+    "dist_coast_m",
+]
+
+FEATURES = DYNAMIC_FEATURES + STATIC_FEATURES
+
+SPECIES_SUPPORT = [
+    "presence_count",
+    "individual_count",
+    "trip_count",
+]
+
+FISHING_SUPPORT = [
+    "vessel_count",
+    "fishing_hours",
+]
+
+SPECIES_TARGET = "residence_index"
+FISHING_TARGET = "fishing_activity"
+
+
+def feature_root(table: str) -> Path:
+    """Return feature table root."""
+    return paths["data"] / "features" / table
+
+
+def modeling_root(table: str) -> Path:
+    """Return modeling table root."""
+    return paths["data"] / "modeling" / table
+
+
+def partition_path(table: str, year: int) -> Path:
+    """Return feature partition path."""
+    return feature_root(table) / f"year={year}" / "part.parquet"
+
+
+def output_path(table: str, year: int) -> Path:
+    """Return modeling partition path."""
+    return modeling_root(table) / f"year={year}" / "part.parquet"
+
+
+def available_years(table: str) -> list[int]:
+    """Return available partition years."""
+    root = feature_root(table)
+    years = []
+
+    for path in sorted(root.glob("year=*/part.parquet")):
+        years.append(int(path.parent.name.split("=")[1]))
+
+    if not years:
+        raise FileNotFoundError(f"No partitions found for: {table}")
+
+    return years
+
+
+def load_partition(table: str, year: int) -> pd.DataFrame:
+    """Load one feature partition."""
+    path = partition_path(table, year)
+
+    if not path.exists():
+        return pd.DataFrame()
+
+    return pd.read_parquet(path)
+
+
+def load_static() -> pd.DataFrame:
+    """Load static features."""
+    path = feature_root("static") / "static.parquet"
+
+    if not path.exists():
+        raise FileNotFoundError(f"Static features not found: {path}")
+
+    return pd.read_parquet(path)
+
+
+def validate_columns(df: pd.DataFrame, required: list[str], name: str) -> None:
+    """Validate required columns."""
+    missing = [col for col in required if col not in df.columns]
+
+    if missing:
+        raise KeyError(f"{name} missing columns: {missing}")
+
+
+def save_partition(df: pd.DataFrame, table: str, year: int) -> Path:
+    """Save one modeling partition."""
+    path = output_path(table, year)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False, compression="zstd")
+    return path
+
+
+def join_features(
+    df: pd.DataFrame,
+    env: pd.DataFrame,
+    static: pd.DataFrame,
+) -> pd.DataFrame:
+    """Join dynamic and static features."""
+    validate_columns(env, ["h3", "date"] + DYNAMIC_FEATURES, "environmental")
+    validate_columns(static, ["h3"] + STATIC_FEATURES, "static")
+
+    out = df.merge(
+        env[["h3", "date"] + DYNAMIC_FEATURES],
+        on=["h3", "date"],
+        how="inner",
+    )
+
+    out = out.merge(
+        static[["h3"] + STATIC_FEATURES],
+        on="h3",
+        how="left",
+    )
+
+    return out
+
+
+def species_list() -> list[str]:
+    """Return species present in species feature table."""
+    values = set()
+
+    for year in available_years("species_presence"):
+        df = load_partition("species_presence", year)
+        validate_columns(df, ["species"], "species_presence")
+        values.update(df["species"].dropna().unique().tolist())
+
+    return sorted(values)
+
+
+def build_species_training(static: pd.DataFrame) -> None:
+    """Build species-use training table."""
+    for year in available_years("species_presence"):
+        species = load_partition("species_presence", year)
+        env = load_partition("environmental", year)
+
+        if species.empty or env.empty:
+            continue
+
+        validate_columns(
+            species,
+            ["h3", "date", "species"] + SPECIES_SUPPORT,
+            "species_presence",
+        )
+
+        species = species.copy()
+        species[SPECIES_TARGET] = (
+            species["presence_count"] / species["individual_count"]
+        ).astype("float32")
+
+        keep = [
+            "h3",
+            "date",
+            "species",
+            SPECIES_TARGET,
+        ] + SPECIES_SUPPORT
+
+        df = join_features(species[keep], env, static)
+        df = df[keep + FEATURES]
+
+        path = save_partition(df, "species_training", year)
+        print(f"Saved: {path}")
+        print(f"Rows: {len(df)}")
+
+
+def build_fishing_training(static: pd.DataFrame) -> None:
+    """Build fishing activity training table."""
+    for year in available_years("environmental"):
+        env = load_partition("environmental", year)
+
+        if env.empty:
+            continue
+
+        base = env[["h3", "date"]].copy()
+        df = join_features(base, env, static)
+
+        fishing = load_partition("fishing_effort", year)
+
+        if fishing.empty:
+            df["vessel_count"] = 0
+            df["fishing_hours"] = 0.0
+        else:
+            validate_columns(
+                fishing,
+                ["h3", "date"] + FISHING_SUPPORT,
+                "fishing_activity",
+            )
+
+            df = df.merge(
+                fishing[["h3", "date"] + FISHING_SUPPORT],
+                on=["h3", "date"],
+                how="left",
+            )
+
+            df["vessel_count"] = df["vessel_count"].fillna(0).astype("int32")
+            df["fishing_hours"] = df["fishing_hours"].fillna(0.0)
+
+        df[FISHING_TARGET] = 0.0
+
+        mask = df["vessel_count"] > 0
+        df.loc[mask, FISHING_TARGET] = (
+            df.loc[mask, "fishing_hours"] / df.loc[mask, "vessel_count"]
+        )
+
+        df[FISHING_TARGET] = df[FISHING_TARGET].astype("float32")
+
+        keep = [
+            "h3",
+            "date",
+            FISHING_TARGET,
+        ] + FISHING_SUPPORT + FEATURES
+
+        df = df[keep]
+
+        path = save_partition(df, "fishing_training", year)
+        print(f"Saved: {path}")
+        print(f"Rows: {len(df)}")
+
+
+def build_prediction_grid(static: pd.DataFrame) -> None:
+    """Build prediction grid by year."""
+    species = pd.DataFrame({"species": species_list()})
+
+    for year in available_years("environmental"):
+        env = load_partition("environmental", year)
+
+        if env.empty:
+            continue
+
+        base = env[["h3", "date"]].copy()
+        df = join_features(base, env, static)
+        df = df.merge(species, how="cross")
+
+        keep = ["h3", "date", "species"] + FEATURES
+        df = df[keep]
+
+        path = save_partition(df, "prediction_grid", year)
+        print(f"Saved: {path}")
+        print(f"Rows: {len(df)}")
+
+
+def build_model_datasets() -> None:
+    """Build all model-ready datasets."""
+    static = load_static()
+
+    build_species_training(static)
+    build_fishing_training(static)
+    # build_prediction_grid(static)
