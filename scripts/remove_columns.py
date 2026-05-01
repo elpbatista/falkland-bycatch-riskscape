@@ -1,4 +1,4 @@
-"""Remove intermediate climatology mean columns."""
+"""Remove intermediate columns."""
 
 from pathlib import Path
 
@@ -8,10 +8,14 @@ from riskscape.config import paths
 
 
 MEAN_COLUMNS = [
-    "sst_mean",
-    "chl_log_mean",
-    "ssh_mean",
-    "wind_speed_mean",
+    # "sst_mean",
+    # "chl_log_mean",
+    # "ssh_mean",
+    # "wind_speed_mean",
+    # "chl",
+    # "wind_u10",
+    # "wind_v10",
+    "adjusted_doy"
 ]
 
 
