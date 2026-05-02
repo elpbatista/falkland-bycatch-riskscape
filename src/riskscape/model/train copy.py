@@ -5,7 +5,7 @@ from __future__ import annotations
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import OneHotEncoder
 
@@ -14,12 +14,10 @@ from riskscape.model.dataset import FEATURES, FISHING_TARGET, SPECIES_TARGET
 
 
 RANDOM_STATE = 42
+N_ESTIMATORS = 100
 
-SPECIES_N_ESTIMATORS = 200
-
-FISHING_MAX_ITER = 200
-FISHING_LEARNING_RATE = 0.05
-FISHING_MAX_LEAF_NODES = 31
+MAX_FISHING_TRAIN_ROWS = 300_000
+MAX_FISHING_TEST_ROWS = 300_000
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 
@@ -64,6 +62,17 @@ def split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return train, test
 
 
+def sample_rows(df: pd.DataFrame, max_rows: int) -> pd.DataFrame:
+    """Sample rows if dataframe exceeds max_rows."""
+    if len(df) <= max_rows:
+        return df
+
+    return df.sample(
+        n=max_rows,
+        random_state=RANDOM_STATE,
+    ).reset_index(drop=True)
+
+
 def metrics(y_true, y_pred) -> dict:
     """Compute regression metrics."""
     mse = mean_squared_error(y_true, y_pred)
@@ -76,7 +85,7 @@ def metrics(y_true, y_pred) -> dict:
 
 
 def train_species_model() -> None:
-    """Train species-use model with Random Forest."""
+    """Train species-use model."""
     df = load_table("species_training")
 
     cols = ["species", SPECIES_TARGET] + FEATURES
@@ -84,22 +93,22 @@ def train_species_model() -> None:
 
     train, test = split_time(df)
 
-    x_train_num = train[FEATURES].to_numpy()
-    x_test_num = test[FEATURES].to_numpy()
+    x_train = train[FEATURES]
+    x_test = test[FEATURES]
 
     y_train = train[SPECIES_TARGET]
     y_test = test[SPECIES_TARGET]
 
     enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 
-    x_train_species = enc.fit_transform(train[["species"]])
-    x_test_species = enc.transform(test[["species"]])
+    species_train = enc.fit_transform(train[["species"]])
+    species_test = enc.transform(test[["species"]])
 
-    x_train = np.hstack([x_train_species, x_train_num])
-    x_test = np.hstack([x_test_species, x_test_num])
+    x_train = np.hstack([species_train, x_train.values])
+    x_test = np.hstack([species_test, x_test.values])
 
     model = RandomForestRegressor(
-        n_estimators=SPECIES_N_ESTIMATORS,
+        n_estimators=N_ESTIMATORS,
         random_state=RANDOM_STATE,
         n_jobs=-1,
     )
@@ -129,7 +138,7 @@ def train_species_model() -> None:
 
 
 def train_fishing_model() -> None:
-    """Train fishing-activity model with HistGradientBoosting."""
+    """Train fishing-activity model."""
     df = load_table("fishing_training")
 
     cols = [FISHING_TARGET] + FEATURES
@@ -137,17 +146,19 @@ def train_fishing_model() -> None:
 
     train, test = split_time(df)
 
+    train = sample_rows(train, MAX_FISHING_TRAIN_ROWS)
+    test = sample_rows(test, MAX_FISHING_TEST_ROWS)
+
     x_train = train[FEATURES]
     x_test = test[FEATURES]
 
     y_train = train[FISHING_TARGET]
     y_test = test[FISHING_TARGET]
 
-    model = HistGradientBoostingRegressor(
-        max_iter=FISHING_MAX_ITER,
-        learning_rate=FISHING_LEARNING_RATE,
-        max_leaf_nodes=FISHING_MAX_LEAF_NODES,
+    model = RandomForestRegressor(
+        n_estimators=N_ESTIMATORS,
         random_state=RANDOM_STATE,
+        n_jobs=-1,
     )
 
     model.fit(x_train, y_train)
