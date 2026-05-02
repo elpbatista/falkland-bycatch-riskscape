@@ -5,7 +5,10 @@ from __future__ import annotations
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.ensemble import (
+    HistGradientBoostingRegressor,
+    RandomForestRegressor,
+)
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import OneHotEncoder
 
@@ -15,9 +18,9 @@ from riskscape.model.dataset import FEATURES, FISHING_TARGET, SPECIES_TARGET
 
 RANDOM_STATE = 42
 
-SPECIES_N_ESTIMATORS = 200
+SPECIES_N_ESTIMATORS = 300
 
-FISHING_MAX_ITER = 200
+FISHING_MAX_ITER = 300
 FISHING_LEARNING_RATE = 0.05
 FISHING_MAX_LEAF_NODES = 31
 
@@ -63,6 +66,17 @@ def split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return train, test
 
+def split_random(df: pd.DataFrame, test_fraction: float = 0.25):
+    """Split rows randomly into train and test sets."""
+    test = df.sample(
+        frac=test_fraction,
+        random_state=RANDOM_STATE,
+    )
+
+    train = df.drop(test.index).copy()
+    test = test.copy()
+
+    return train, test
 
 def metrics(y_true, y_pred) -> dict:
     """Compute regression metrics."""
@@ -82,13 +96,21 @@ def train_species_model() -> None:
     cols = ["species", SPECIES_TARGET] + FEATURES
     df = df[cols + ["date"]].dropna(subset=cols)
 
-    train, test = split_time(df)
+    # --- stabilize target ---
+    df[SPECIES_TARGET] = df[SPECIES_TARGET].clip(upper=20)
+    y = np.log1p(df[SPECIES_TARGET])
+
+    df = df.copy()
+    df["_y"] = y
+
+    # It is not perfect, because random split can leak temporal similarity, but for a quick baseline improvement it is much better than testing only on one species
+    train, test = split_random(df)
 
     x_train_num = train[FEATURES].to_numpy()
     x_test_num = test[FEATURES].to_numpy()
 
-    y_train = train[SPECIES_TARGET]
-    y_test = test[SPECIES_TARGET]
+    y_train = train["_y"]
+    y_test = test["_y"]
 
     enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 
@@ -100,14 +122,21 @@ def train_species_model() -> None:
 
     model = RandomForestRegressor(
         n_estimators=SPECIES_N_ESTIMATORS,
+        max_depth=20,
+        min_samples_leaf=5,
         random_state=RANDOM_STATE,
         n_jobs=-1,
     )
 
     model.fit(x_train, y_train)
-    pred = model.predict(x_test)
 
-    m = metrics(y_test, pred)
+    pred = model.predict(x_test)
+    pred = np.expm1(pred)
+    pred = np.maximum(pred, 0.0)
+
+    y_test_inv = np.expm1(y_test)
+
+    m = metrics(y_test_inv, pred)
     m["train_rows"] = int(len(train))
     m["test_rows"] = int(len(test))
 
@@ -120,6 +149,7 @@ def train_species_model() -> None:
             "encoder": enc,
             "features": FEATURES,
             "target": SPECIES_TARGET,
+            "log_target": True,
         },
         path,
     )
@@ -135,25 +165,56 @@ def train_fishing_model() -> None:
     cols = [FISHING_TARGET] + FEATURES
     df = df[cols + ["date"]].dropna(subset=cols)
 
+    # --- stabilize target ---
+    y = np.log1p(df[FISHING_TARGET])
+
+    df = df.copy()
+    df["_y"] = y
+
     train, test = split_time(df)
+
+    # --- size constraints for quick baseline training ---
+
+    max_train_rows = 500_000
+    max_test_rows = 300_000
+
+    if len(train) > max_train_rows:
+        train = train.sample(
+            n=max_train_rows,
+            random_state=RANDOM_STATE,
+        )
+
+    if len(test) > max_test_rows:
+        test = test.sample(
+            n=max_test_rows,
+            random_state=RANDOM_STATE,
+        )
+
+    # --------------------------------------------------------
 
     x_train = train[FEATURES]
     x_test = test[FEATURES]
 
-    y_train = train[FISHING_TARGET]
-    y_test = test[FISHING_TARGET]
+    y_train = train["_y"]
+    y_test = test["_y"]
 
     model = HistGradientBoostingRegressor(
         max_iter=FISHING_MAX_ITER,
         learning_rate=FISHING_LEARNING_RATE,
         max_leaf_nodes=FISHING_MAX_LEAF_NODES,
+        l2_regularization=0.1,
         random_state=RANDOM_STATE,
     )
 
     model.fit(x_train, y_train)
-    pred = model.predict(x_test)
 
-    m = metrics(y_test, pred)
+    pred = model.predict(x_test)
+    pred = np.expm1(pred)
+    pred = np.maximum(pred, 0.0)
+
+    y_test_inv = np.expm1(y_test)
+
+    m = metrics(y_test_inv, pred)
     m["train_rows"] = int(len(train))
     m["test_rows"] = int(len(test))
 
@@ -165,6 +226,7 @@ def train_fishing_model() -> None:
             "model": model,
             "features": FEATURES,
             "target": FISHING_TARGET,
+            "log_target": True,
         },
         path,
     )

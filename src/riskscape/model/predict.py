@@ -63,6 +63,18 @@ def get_payload_model(payload):
     return payload
 
 
+# def predict_fishing(
+#     batch: pd.DataFrame,
+#     fishing_payload,
+# ) -> np.ndarray:
+#     """Predict fishing activity for base h3/date rows."""
+#     model = get_payload_model(fishing_payload)
+
+#     pred = model.predict(batch[FEATURES])
+#     pred = np.maximum(pred, 0.0)
+
+#     return pred.astype("float32")
+
 def predict_fishing(
     batch: pd.DataFrame,
     fishing_payload,
@@ -71,10 +83,31 @@ def predict_fishing(
     model = get_payload_model(fishing_payload)
 
     pred = model.predict(batch[FEATURES])
+
+    if isinstance(fishing_payload, dict) and fishing_payload.get("log_target"):
+        pred = np.expm1(pred)
+
     pred = np.maximum(pred, 0.0)
 
     return pred.astype("float32")
 
+# def predict_species(
+#     expanded: pd.DataFrame,
+#     species_payload,
+# ) -> np.ndarray:
+#     """Predict species use for h3/date/species rows."""
+#     model = species_payload["model"]
+#     encoder = species_payload["encoder"]
+
+#     species_encoded = encoder.transform(expanded[["species"]])
+#     feature_values = expanded[FEATURES].to_numpy()
+
+#     x = np.hstack([species_encoded, feature_values])
+
+#     pred = model.predict(x)
+#     pred = np.maximum(pred, 0.0)
+
+#     return pred.astype("float32")
 
 def predict_species(
     expanded: pd.DataFrame,
@@ -90,10 +123,13 @@ def predict_species(
     x = np.hstack([species_encoded, feature_values])
 
     pred = model.predict(x)
+
+    if species_payload.get("log_target"):
+        pred = np.expm1(pred)
+
     pred = np.maximum(pred, 0.0)
 
     return pred.astype("float32")
-
 
 def predict_year(
     year: int,
