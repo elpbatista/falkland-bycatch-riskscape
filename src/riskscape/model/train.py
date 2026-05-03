@@ -19,6 +19,7 @@ from riskscape.model.dataset import FEATURES, FISHING_TARGET, SPECIES_TARGET
 RANDOM_STATE = 42
 
 SPECIES_N_ESTIMATORS = 300
+SPECIES_WEIGHT_FACTOR = 1.0
 
 FISHING_MAX_ITER = 300
 FISHING_LEARNING_RATE = 0.05
@@ -66,7 +67,11 @@ def split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return train, test
 
-def split_random(df: pd.DataFrame, test_fraction: float = 0.25):
+
+def split_random(
+    df: pd.DataFrame,
+    test_fraction: float = 0.25,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split rows randomly into train and test sets."""
     test = df.sample(
         frac=test_fraction,
@@ -78,6 +83,7 @@ def split_random(df: pd.DataFrame, test_fraction: float = 0.25):
 
     return train, test
 
+
 def metrics(y_true, y_pred) -> dict:
     """Compute regression metrics."""
     mse = mean_squared_error(y_true, y_pred)
@@ -87,6 +93,7 @@ def metrics(y_true, y_pred) -> dict:
         "rmse": float(np.sqrt(mse)),
         "mae": float(mean_absolute_error(y_true, y_pred)),
     }
+
 
 def sample_by_year(df: pd.DataFrame, max_rows_per_year: int) -> pd.DataFrame:
     """Sample up to max_rows_per_year from each year."""
@@ -103,22 +110,42 @@ def sample_by_year(df: pd.DataFrame, max_rows_per_year: int) -> pd.DataFrame:
 
     return pd.concat(frames, ignore_index=True)
 
-def train_species_model() -> None:
-    """Train species-use model with Random Forest."""
+
+def prepare_species_table() -> pd.DataFrame:
+    """Load and prepare species training table."""
     df = load_table("species_training")
 
     cols = ["species", SPECIES_TARGET] + FEATURES
-    df = df[cols + ["date"]].dropna(subset=cols)
+    df = df[cols + ["date"]].dropna(subset=cols).copy()
 
-    # --- stabilize target ---
-    df[SPECIES_TARGET] = df[SPECIES_TARGET].clip(upper=20)
-    y = np.log1p(df[SPECIES_TARGET])
+    df["_y"] = np.log1p(df[SPECIES_TARGET])
 
-    df = df.copy()
-    df["_y"] = y
+    return df
 
-    # It is not perfect, because random split can leak temporal similarity, 
-    # but for a quick baseline improvement it is much better than testing only on one species
+
+def build_species_forest() -> RandomForestRegressor:
+    """Build species Random Forest model."""
+    return RandomForestRegressor(
+        n_estimators=SPECIES_N_ESTIMATORS,
+        max_depth=20,
+        min_samples_leaf=5,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+    )
+
+
+def species_weights(y_train: pd.Series) -> np.ndarray:
+    """Return sample weights from raw target scale."""
+    raw_target = np.expm1(y_train)
+
+    weights = 1.0 + SPECIES_WEIGHT_FACTOR * raw_target
+
+    return weights.to_numpy(dtype="float32")
+
+
+def train_species_model() -> None:
+    """Train joint species-use model with Random Forest."""
+    df = prepare_species_table()
 
     train, test = split_random(df)
 
@@ -136,15 +163,13 @@ def train_species_model() -> None:
     x_train = np.hstack([x_train_species, x_train_num])
     x_test = np.hstack([x_test_species, x_test_num])
 
-    model = RandomForestRegressor(
-        n_estimators=SPECIES_N_ESTIMATORS,
-        max_depth=20,
-        min_samples_leaf=5,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-    )
+    model = build_species_forest()
 
-    model.fit(x_train, y_train)
+    model.fit(
+        x_train,
+        y_train,
+        sample_weight=species_weights(y_train),
+    )
 
     pred = model.predict(x_test)
     pred = np.expm1(pred)
@@ -166,12 +191,79 @@ def train_species_model() -> None:
             "features": FEATURES,
             "target": SPECIES_TARGET,
             "log_target": True,
+            "model_type": "joint_species",
+            "weight_factor": SPECIES_WEIGHT_FACTOR,
         },
         path,
     )
 
-    print("Species model saved:", path)
+    print("Joint species model saved:", path)
     print(m)
+
+
+def train_single_species_model(species_name: str, df: pd.DataFrame) -> None:
+    """Train one species-use model for a single species."""
+    species_df = df[df["species"] == species_name].copy()
+
+    if species_df.empty:
+        print(f"Skipping {species_name}: no rows")
+        return
+
+    train, test = split_random(species_df)
+
+    x_train = train[FEATURES]
+    x_test = test[FEATURES]
+
+    y_train = train["_y"]
+    y_test = test["_y"]
+
+    model = build_species_forest()
+
+    model.fit(
+        x_train,
+        y_train,
+        sample_weight=species_weights(y_train),
+    )
+
+    pred = model.predict(x_test)
+    pred = np.expm1(pred)
+    pred = np.maximum(pred, 0.0)
+
+    y_test_inv = np.expm1(y_test)
+
+    m = metrics(y_test_inv, pred)
+    m["species"] = species_name
+    m["train_rows"] = int(len(train))
+    m["test_rows"] = int(len(test))
+
+    safe_name = species_name.lower()
+    path = MODEL_DIR / f"species_model_{safe_name}.joblib"
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    joblib.dump(
+        {
+            "model": model,
+            "species": species_name,
+            "features": FEATURES,
+            "target": SPECIES_TARGET,
+            "log_target": True,
+            "model_type": "single_species",
+            "weight_factor": SPECIES_WEIGHT_FACTOR,
+        },
+        path,
+    )
+
+    print(f"{species_name} species model saved:", path)
+    print(m)
+
+
+def train_separate_species_models() -> None:
+    """Train one species-use model per species."""
+    df = prepare_species_table()
+    species_values = sorted(df["species"].dropna().unique().tolist())
+
+    for species_name in species_values:
+        train_single_species_model(species_name, df)
 
 
 def train_fishing_model() -> None:
@@ -179,13 +271,9 @@ def train_fishing_model() -> None:
     df = load_table("fishing_training")
 
     cols = [FISHING_TARGET] + FEATURES
-    df = df[cols + ["date"]].dropna(subset=cols)
+    df = df[cols + ["date"]].dropna(subset=cols).copy()
 
-    # --- stabilize target ---
-    y = np.log1p(df[FISHING_TARGET])
-
-    df = df.copy()
-    df["_y"] = y
+    df["_y"] = np.log1p(df[FISHING_TARGET])
 
     train, test = split_time(df)
 
@@ -195,7 +283,7 @@ def train_fishing_model() -> None:
         test = test.sample(
             n=1_000_000,
             random_state=RANDOM_STATE,
-        )    
+        )
 
     x_train = train[FEATURES]
     x_test = test[FEATURES]
@@ -243,4 +331,5 @@ def train_fishing_model() -> None:
 def train_models() -> None:
     """Train all baseline models."""
     train_species_model()
+    train_separate_species_models()
     # train_fishing_model()

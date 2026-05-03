@@ -34,6 +34,21 @@ def load_model_payload(path: Path):
     return joblib.load(path)
 
 
+def species_model_path(species: str) -> Path:
+    """Return single-species model path."""
+    return MODEL_DIR / f"species_model_{species.lower()}.joblib"
+
+
+def load_species_payloads(species_values: list[str]) -> dict[str, dict]:
+    """Load one species model per species."""
+    payloads = {}
+
+    for species in species_values:
+        payloads[species] = load_model_payload(species_model_path(species))
+
+    return payloads
+
+
 def observed_fishing_path(year: int) -> Path:
     """Return observed fishing modeling partition path."""
     return (
@@ -87,20 +102,28 @@ def iter_batches(df: pd.DataFrame, batch_rows: int):
         yield df.iloc[start:start + batch_rows].copy()
 
 
+def validate_model_features(species_payload) -> None:
+    """Validate model feature compatibility."""
+    payload_features = species_payload.get("features", FEATURES)
+
+    if list(payload_features) != list(FEATURES):
+        raise ValueError(
+            "Model features do not match current FEATURES. "
+            f"Model: {list(payload_features)}. "
+            f"Current: {list(FEATURES)}."
+        )
+
+
 def predict_species(
-    expanded: pd.DataFrame,
+    batch: pd.DataFrame,
     species_payload,
 ) -> np.ndarray:
     """Predict species use in model target space."""
+    validate_model_features(species_payload)
+
     model = species_payload["model"]
-    encoder = species_payload["encoder"]
 
-    species_encoded = encoder.transform(expanded[["species"]])
-    feature_values = expanded[FEATURES].to_numpy()
-
-    x = np.hstack([species_encoded, feature_values])
-
-    pred = model.predict(x)
+    pred = model.predict(batch[FEATURES])
     pred = np.maximum(pred, 0.0)
 
     return pred.astype("float32")
@@ -126,13 +149,28 @@ def merge_year_parts(year: int) -> Path:
     return out_file
 
 
+def build_species_predictions(
+    batch: pd.DataFrame,
+    species_payloads: dict[str, dict],
+) -> pd.DataFrame:
+    """Predict all species for one batch."""
+    frames = []
+
+    for species, payload in species_payloads.items():
+        out = batch.copy()
+        out["species"] = species
+        out["species_use_log_pred"] = predict_species(out, payload)
+        frames.append(out)
+
+    return pd.concat(frames, ignore_index=True)
+
+
 def predict_year(
     year: int,
     static: pd.DataFrame,
-    species_df: pd.DataFrame,
-    species_payload,
+    species_payloads: dict[str, dict],
 ) -> None:
-    """Generate species risk and exposure from observed fishing."""
+    """Generate observed-fishing risk predictions for one year."""
     env = load_partition("environmental", year)
 
     if env.empty:
@@ -159,8 +197,6 @@ def predict_year(
     out_dir = output_dir(year)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    n_species = len(species_df)
-
     for i, batch in enumerate(iter_batches(base, BATCH_ROWS)):
         fishing_activity = batch[FISHING_TARGET].to_numpy(dtype="float32")
 
@@ -171,29 +207,20 @@ def predict_year(
             fishing_activity[positive]
         ).astype("float32")
 
-        expanded = batch.merge(species_df, how="cross")
-        species_pred = predict_species(expanded, species_payload)
+        batch = batch.copy()
+        batch["fishing_activity"] = fishing_activity
+        batch["fishing_activity_log"] = fishing_activity_log
 
-        expanded["species_use_log_pred"] = species_pred
-        expanded["fishing_activity"] = np.repeat(fishing_activity, n_species)
-        expanded["fishing_activity_log"] = np.repeat(
-            fishing_activity_log,
-            n_species,
-        )
+        expanded = build_species_predictions(batch, species_payloads)
 
         has_fishing = expanded["fishing_activity"] > 0
 
-        expanded["risk_log_pred"] = expanded[
-            "species_use_log_pred"
-        ].where(
-            has_fishing,
-            0.0,
-        ).astype("float32")
-
-        expanded["exposure_log_pred"] = (
+        risk_log = (
             expanded["species_use_log_pred"]
             + expanded["fishing_activity_log"]
-        ).where(
+        )
+
+        expanded["risk_log_pred"] = risk_log.where(
             has_fishing,
             0.0,
         ).astype("float32")
@@ -207,7 +234,6 @@ def predict_year(
                 "fishing_activity",
                 "fishing_activity_log",
                 "risk_log_pred",
-                "exposure_log_pred",
             ]
         ]
 
@@ -224,14 +250,12 @@ def predict_year(
 def predict_models() -> None:
     """Generate full-grid historical risk predictions."""
     static = load_static()
-    species_df = pd.DataFrame({"species": species_list()})
-
-    species_payload = load_model_payload(MODEL_DIR / "species_model.joblib")
+    species_values = species_list()
+    species_payloads = load_species_payloads(species_values)
 
     for year in available_years("environmental"):
         predict_year(
             year=year,
             static=static,
-            species_df=species_df,
-            species_payload=species_payload,
+            species_payloads=species_payloads,
         )

@@ -50,23 +50,23 @@ def main() -> int:
     ax.set_facecolor("#e5fbfa")
 
     # Bathymetry (base layer)
-    # plot_gdf["depth_log"] = np.log1p(plot_gdf["depth_m"])
-    plot_gdf["dist_coast_km"] = plot_gdf["dist_coast_m"] / 1000.0
-    plot_gdf["dist_coast_km_log"] = np.log1p(plot_gdf["dist_coast_km"])
+    plot_gdf["depth_log"] = np.log1p(plot_gdf["depth_m"])
+    # plot_gdf["dist_coast_km"] = plot_gdf["dist_coast_m"] / 1000.0
+    # plot_gdf["dist_coast_km_log"] = np.log1p(plot_gdf["dist_coast_km"])
 
     plot_gdf.plot(
         ax=ax,
-        # column="depth_log",
+        column="depth_log",
         # column="slope",
-        column = "dist_coast_km_log",
-        # cmap="Blues",
+        # column = "dist_coast_km_log",
+        cmap="Blues",
         # cmap="inferno",
-        cmap="viridis",
+        # cmap="viridis",
         legend=True,
         edgecolor="none",
         linewidth=0,
         vmin=0,
-        vmax=plot_gdf["dist_coast_km_log"].quantile(0.98),
+        vmax=plot_gdf["depth_log"].quantile(0.98),
     )
 
     # Grid (optional)
@@ -93,9 +93,9 @@ def main() -> int:
     ax.set_xlim(xmin - margin, xmax + margin)
     ax.set_ylim(ymin - margin * scale, ymax + margin * scale)
 
-    # ax.set_title("Bathymetry Depth Map (H3 mean depth, m)")
+    ax.set_title("Bathymetry Depth Map (H3 mean depth, m)")
     # ax.set_title("Bathymetry Slope Map (H3 mean slope, m/m)")
-    ax.set_title("Distance to Coast Map (H3 mean distance, km)")
+    # ax.set_title("Distance to Coast Map (H3 mean distance, km)")
 
     plt.show()
 

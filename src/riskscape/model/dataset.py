@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from curses import raw
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
+
+from riskscape.grid import load_grid
 
 from riskscape.config import paths
 
@@ -29,6 +33,10 @@ STATIC_FEATURES = [
     "depth_m",
     "slope",
     "dist_coast_m",
+    "lat_sin",
+    "lat_cos",
+    "lon_sin",
+    "lon_cos",
 ]
 
 FEATURES = DYNAMIC_FEATURES + STATIC_FEATURES
@@ -93,13 +101,44 @@ def load_partition(table: str, year: int) -> pd.DataFrame:
 
 
 def load_static() -> pd.DataFrame:
-    """Load static features."""
+    """Load static features and encoded H3 coordinates."""
     path = feature_root("static") / "static.parquet"
 
     if not path.exists():
         raise FileNotFoundError(f"Static features not found: {path}")
 
-    return pd.read_parquet(path)
+    static = pd.read_parquet(path)
+
+    grid = load_grid(uint64=True)
+    validate_columns(grid, ["h3", "lat", "lon"], "grid")
+
+    coords = grid[["h3", "lat", "lon"]].copy()
+
+    lat_rad = np.deg2rad(coords["lat"].astype("float32"))
+    lon_rad = np.deg2rad(coords["lon"].astype("float32"))
+
+    coords["lat_sin"] = np.sin(lat_rad).astype("float32")
+    coords["lat_cos"] = np.cos(lat_rad).astype("float32")
+    coords["lon_sin"] = np.sin(lon_rad).astype("float32")
+    coords["lon_cos"] = np.cos(lon_rad).astype("float32")
+
+    out = static.merge(
+        coords[
+            [
+                "h3",
+                "lat_sin",
+                "lat_cos",
+                "lon_sin",
+                "lon_cos",
+            ]
+        ],
+        on="h3",
+        how="left",
+    )
+
+    validate_columns(out, ["h3"] + STATIC_FEATURES, "static")
+
+    return out
 
 
 def validate_columns(df: pd.DataFrame, required: list[str], name: str) -> None:
@@ -170,9 +209,8 @@ def build_species_training(static: pd.DataFrame) -> None:
         )
 
         species = species.copy()
-        species[SPECIES_TARGET] = (
-            species["presence_count"] / species["individual_count"]
-        ).astype("float32")
+
+        species[SPECIES_TARGET] = species["presence_count"].astype("float32")
 
         keep = [
             "h3",
@@ -270,5 +308,5 @@ def build_model_datasets() -> None:
     static = load_static()
 
     build_species_training(static)
-    build_fishing_training(static)
+    # build_fishing_training(static)
     # build_prediction_grid(static)
