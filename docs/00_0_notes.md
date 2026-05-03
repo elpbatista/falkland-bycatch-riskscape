@@ -16,3 +16,10 @@ asks the fishing model “how much fishing activity here?”,
 multiplies them,
 and saves the resulting risk surface.
 ```
+
+Bycatch risk is primarily structured by:
+
+1) spatial fishing patterns constrained by bathymetry and distance to coast
+2) dynamic species distributions driven by environmental variability
+
+Fishing model is used for forecasting and scenario simulation, but observed fishing data is used for historical risk estimation.

@@ -88,6 +88,20 @@ def metrics(y_true, y_pred) -> dict:
         "mae": float(mean_absolute_error(y_true, y_pred)),
     }
 
+def sample_by_year(df: pd.DataFrame, max_rows_per_year: int) -> pd.DataFrame:
+    """Sample up to max_rows_per_year from each year."""
+    frames = []
+
+    for _, group in df.groupby("year", sort=True):
+        if len(group) > max_rows_per_year:
+            group = group.sample(
+                n=max_rows_per_year,
+                random_state=RANDOM_STATE,
+            )
+
+        frames.append(group)
+
+    return pd.concat(frames, ignore_index=True)
 
 def train_species_model() -> None:
     """Train species-use model with Random Forest."""
@@ -103,7 +117,9 @@ def train_species_model() -> None:
     df = df.copy()
     df["_y"] = y
 
-    # It is not perfect, because random split can leak temporal similarity, but for a quick baseline improvement it is much better than testing only on one species
+    # It is not perfect, because random split can leak temporal similarity, 
+    # but for a quick baseline improvement it is much better than testing only on one species
+
     train, test = split_random(df)
 
     x_train_num = train[FEATURES].to_numpy()
@@ -173,24 +189,13 @@ def train_fishing_model() -> None:
 
     train, test = split_time(df)
 
-    # --- size constraints for quick baseline training ---
+    train = sample_by_year(train, 250_000)
 
-    max_train_rows = 500_000
-    max_test_rows = 300_000
-
-    if len(train) > max_train_rows:
-        train = train.sample(
-            n=max_train_rows,
-            random_state=RANDOM_STATE,
-        )
-
-    if len(test) > max_test_rows:
+    if len(test) > 1_000_000:
         test = test.sample(
-            n=max_test_rows,
+            n=1_000_000,
             random_state=RANDOM_STATE,
-        )
-
-    # --------------------------------------------------------
+        )    
 
     x_train = train[FEATURES]
     x_test = test[FEATURES]
@@ -238,4 +243,4 @@ def train_fishing_model() -> None:
 def train_models() -> None:
     """Train all baseline models."""
     train_species_model()
-    train_fishing_model()
+    # train_fishing_model()
