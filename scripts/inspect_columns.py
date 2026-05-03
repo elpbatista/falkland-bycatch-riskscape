@@ -1,6 +1,7 @@
 import pandas as pd
-
+import numpy as np
 from riskscape.config import paths
+from riskscape.model.dataset import SPECIES_TARGET
 
 # path = paths["data"] / "processed" / "h3_neighbor_index.parquet"
 path = paths["data"] / "features" / "environmental" / "year=2023/part.parquet"
@@ -51,4 +52,11 @@ df["month"] = df["date"].dt.month
 # print(df.dtypes)
 # print(df.head())
 
-print(df["presence_count"].head(50))
+df.plot.scatter("chl_log", SPECIES_TARGET)
+
+# print(df["presence_count"].head(50))
+
+for f in ["sst", "chl_log", "ssh"]:
+
+    print(f, np.corrcoef(df[f], df[SPECIES_TARGET])[0, 1])
+

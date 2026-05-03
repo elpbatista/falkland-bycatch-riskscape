@@ -19,6 +19,7 @@ from riskscape.model.dataset import (
     species_list,
 )
 
+from riskscape.model.train import PRIMARY_MODEL_NAME
 
 BATCH_ROWS = 250_000
 
@@ -35,8 +36,11 @@ def load_model_payload(path: Path):
 
 
 def species_model_path(species: str) -> Path:
-    """Return single-species model path."""
-    return MODEL_DIR / f"species_model_{species.lower()}.joblib"
+    """Return selected single-species model path."""
+    return (
+        MODEL_DIR
+        / f"species_model_{species.lower()}_{PRIMARY_MODEL_NAME}.joblib"
+    )
 
 
 def load_species_payloads(species_values: list[str]) -> dict[str, dict]:
@@ -44,7 +48,12 @@ def load_species_payloads(species_values: list[str]) -> dict[str, dict]:
     payloads = {}
 
     for species in species_values:
-        payloads[species] = load_model_payload(species_model_path(species))
+        path = species_model_path(species)
+        payload = load_model_payload(path)
+        payloads[species] = payload
+
+        model_name = payload.get("model_name", "unknown")
+        print(f"Loaded {species} model: {model_name}")
 
     return payloads
 
@@ -68,6 +77,7 @@ def load_observed_fishing(year: int) -> pd.DataFrame:
         return pd.DataFrame(columns=["h3", "date", FISHING_TARGET])
 
     df = pd.read_parquet(path)
+
     return df[["h3", "date", FISHING_TARGET]].copy()
 
 
@@ -214,7 +224,6 @@ def predict_year(
         expanded = build_species_predictions(batch, species_payloads)
 
         has_fishing = expanded["fishing_activity"] > 0
-
         risk_log = (
             expanded["species_use_log_pred"]
             + expanded["fishing_activity_log"]
@@ -230,10 +239,10 @@ def predict_year(
                 "h3",
                 "date",
                 "species",
-                "species_use_log_pred",
+                "species_use_log_pred",   # hazard
+                "fishing_activity_log",   # exposure
+                "risk_log_pred",          # combined
                 "fishing_activity",
-                "fishing_activity_log",
-                "risk_log_pred",
             ]
         ]
 

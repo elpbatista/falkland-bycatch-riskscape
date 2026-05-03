@@ -1,11 +1,14 @@
-"""Train baseline models."""
+"""Train species-use models."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import (
+    ExtraTreesRegressor,
     HistGradientBoostingRegressor,
     RandomForestRegressor,
 )
@@ -13,19 +16,24 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import OneHotEncoder
 
 from riskscape.config import paths
-from riskscape.model.dataset import FEATURES, FISHING_TARGET, SPECIES_TARGET
+from riskscape.model.dataset import FEATURES, SPECIES_TARGET
 
 
 RANDOM_STATE = 42
 
-SPECIES_N_ESTIMATORS = 300
-SPECIES_WEIGHT_FACTOR = 1.0
+MODEL_NAMES = [
+    "hist_gradient_boosting",
+    "random_forest",
+    "extra_trees",
+]
 
-FISHING_MAX_ITER = 300
-FISHING_LEARNING_RATE = 0.05
-FISHING_MAX_LEAF_NODES = 31
+PRIMARY_MODEL_NAME = "extra_trees"
+
+MAX_ZERO_ROWS = 250_000
+MAX_POSITIVE_ROWS = None
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
+METRICS_DIR = paths["data"] / "modeling" / "metrics"
 
 
 def load_table(name: str) -> pd.DataFrame:
@@ -40,32 +48,6 @@ def load_table(name: str) -> pd.DataFrame:
         raise FileNotFoundError(f"No data found for {name}")
 
     return pd.concat(frames, ignore_index=True)
-
-
-def add_year(df: pd.DataFrame) -> pd.DataFrame:
-    """Add year column from date."""
-    out = df.copy()
-    out["year"] = out["date"].dt.year
-    return out
-
-
-def split_time(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Use last available year as test set."""
-    df = add_year(df)
-    years = sorted(df["year"].unique())
-
-    if len(years) < 2:
-        raise ValueError("At least two years are required for time split")
-
-    test_year = years[-1]
-
-    train = df[df["year"] < test_year].copy()
-    test = df[df["year"] == test_year].copy()
-
-    if train.empty or test.empty:
-        raise ValueError("Time split produced empty train or test set")
-
-    return train, test
 
 
 def split_random(
@@ -95,22 +77,6 @@ def metrics(y_true, y_pred) -> dict:
     }
 
 
-def sample_by_year(df: pd.DataFrame, max_rows_per_year: int) -> pd.DataFrame:
-    """Sample up to max_rows_per_year from each year."""
-    frames = []
-
-    for _, group in df.groupby("year", sort=True):
-        if len(group) > max_rows_per_year:
-            group = group.sample(
-                n=max_rows_per_year,
-                random_state=RANDOM_STATE,
-            )
-
-        frames.append(group)
-
-    return pd.concat(frames, ignore_index=True)
-
-
 def prepare_species_table() -> pd.DataFrame:
     """Load and prepare species training table."""
     df = load_table("species_training")
@@ -119,34 +85,111 @@ def prepare_species_table() -> pd.DataFrame:
     df = df[cols + ["date"]].dropna(subset=cols).copy()
 
     df["_y"] = np.log1p(df[SPECIES_TARGET])
+    # df["_y"] = df[SPECIES_TARGET]
 
     return df
 
 
-def build_species_forest() -> RandomForestRegressor:
-    """Build species Random Forest model."""
-    return RandomForestRegressor(
-        n_estimators=SPECIES_N_ESTIMATORS,
-        max_depth=20,
-        min_samples_leaf=5,
+# def sample_training_rows(df: pd.DataFrame) -> pd.DataFrame:
+#     """Sample zeros while preserving positive rows."""
+#     positive = df[df[SPECIES_TARGET] > 0].copy()
+#     zero = df[df[SPECIES_TARGET] == 0].copy()
+
+#     if MAX_POSITIVE_ROWS is not None and len(positive) > MAX_POSITIVE_ROWS:
+#         positive = positive.sample(
+#             n=MAX_POSITIVE_ROWS,
+#             random_state=RANDOM_STATE,
+#         )
+
+#     if MAX_ZERO_ROWS is not None and len(zero) > MAX_ZERO_ROWS:
+#         zero = zero.sample(
+#             n=MAX_ZERO_ROWS,
+#             random_state=RANDOM_STATE,
+#         )
+
+#     out = pd.concat([positive, zero], ignore_index=True)
+
+#     return out.sample(frac=1.0, random_state=RANDOM_STATE).reset_index(drop=True)
+
+def sample_training_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Balance zeros vs positives."""
+    positive = df[df[SPECIES_TARGET] > 0].copy()
+    zero = df[df[SPECIES_TARGET] == 0].copy()
+
+    n_pos = len(positive)
+
+    zero = zero.sample(
+        n=min(n_pos, len(zero)),
         random_state=RANDOM_STATE,
-        n_jobs=-1,
     )
 
+    out = pd.concat([positive, zero], ignore_index=True)
 
-def species_weights(y_train: pd.Series) -> np.ndarray:
+    return out.sample(frac=1.0, random_state=RANDOM_STATE).reset_index(drop=True)
+
+def build_model(model_name: str):
+    """Build model by name."""
+    if model_name == "random_forest":
+        return RandomForestRegressor(
+            n_estimators=300,
+            max_depth=20,
+            min_samples_leaf=5,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        )
+
+    if model_name == "extra_trees":
+        return ExtraTreesRegressor(
+            n_estimators=300,
+            max_depth=20,
+            min_samples_leaf=5,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        )
+
+    if model_name == "hist_gradient_boosting":
+        return HistGradientBoostingRegressor(
+            max_iter=300,
+            learning_rate=0.05,
+            max_leaf_nodes=31,
+            l2_regularization=0.1,
+            random_state=RANDOM_STATE,
+        )
+
+    raise ValueError(f"Unknown model: {model_name}")
+
+
+def sample_weights(y_train: pd.Series) -> np.ndarray:
     """Return sample weights from raw target scale."""
     raw_target = np.expm1(y_train)
-
-    weights = 1.0 + SPECIES_WEIGHT_FACTOR * raw_target
+    # weights = 1.0 + raw_target
+    # weights = 1.0 + 2.0 * raw_target
+    weights = 1 + raw_target ** 0.75
 
     return weights.to_numpy(dtype="float32")
 
 
-def train_species_model() -> None:
-    """Train joint species-use model with Random Forest."""
-    df = prepare_species_table()
+def save_payload(payload: dict, path: Path) -> None:
+    """Save model payload."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(payload, path)
 
+
+def evaluate_predictions(y_test: pd.Series, pred_log: np.ndarray) -> dict:
+    """Evaluate predictions on raw target scale."""
+    pred = np.expm1(pred_log)
+    pred = np.maximum(pred, 0.0)
+
+    y_test_raw = np.expm1(y_test)
+
+    return metrics(y_test_raw, pred)
+
+
+def train_joint_species_model(
+    df: pd.DataFrame,
+    model_name: str,
+) -> dict:
+    """Train joint species model."""
     train, test = split_random(df)
 
     x_train_num = train[FEATURES].to_numpy()
@@ -163,51 +206,54 @@ def train_species_model() -> None:
     x_train = np.hstack([x_train_species, x_train_num])
     x_test = np.hstack([x_test_species, x_test_num])
 
-    model = build_species_forest()
+    model = build_model(model_name)
 
     model.fit(
         x_train,
         y_train,
-        sample_weight=species_weights(y_train),
+        sample_weight=sample_weights(y_train),
     )
 
-    pred = model.predict(x_test)
-    pred = np.expm1(pred)
-    pred = np.maximum(pred, 0.0)
+    pred_log = model.predict(x_test)
 
-    y_test_inv = np.expm1(y_test)
-
-    m = metrics(y_test_inv, pred)
+    m = evaluate_predictions(y_test, pred_log)
+    m["model"] = model_name
+    m["model_type"] = "joint_species"
+    m["species"] = "all"
     m["train_rows"] = int(len(train))
     m["test_rows"] = int(len(test))
 
-    path = MODEL_DIR / "species_model.joblib"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "model": model,
+        "encoder": enc,
+        "features": FEATURES,
+        "target": SPECIES_TARGET,
+        "log_target": True,
+        "model_name": model_name,
+        "model_type": "joint_species",
+    }
 
-    joblib.dump(
-        {
-            "model": model,
-            "encoder": enc,
-            "features": FEATURES,
-            "target": SPECIES_TARGET,
-            "log_target": True,
-            "model_type": "joint_species",
-            "weight_factor": SPECIES_WEIGHT_FACTOR,
-        },
-        path,
+    save_payload(
+        payload,
+        MODEL_DIR / f"species_model_joint_{model_name}.joblib",
     )
 
-    print("Joint species model saved:", path)
+    print("Joint species model:", model_name)
     print(m)
 
+    return m
 
-def train_single_species_model(species_name: str, df: pd.DataFrame) -> None:
-    """Train one species-use model for a single species."""
+
+def train_single_species_model(
+    species_name: str,
+    df: pd.DataFrame,
+    model_name: str,
+) -> dict:
+    """Train one species-use model."""
     species_df = df[df["species"] == species_name].copy()
 
     if species_df.empty:
-        print(f"Skipping {species_name}: no rows")
-        return
+        raise ValueError(f"No rows found for species: {species_name}")
 
     train, test = split_random(species_df)
 
@@ -217,119 +263,77 @@ def train_single_species_model(species_name: str, df: pd.DataFrame) -> None:
     y_train = train["_y"]
     y_test = test["_y"]
 
-    model = build_species_forest()
+    model = build_model(model_name)
 
     model.fit(
         x_train,
         y_train,
-        sample_weight=species_weights(y_train),
+        sample_weight=sample_weights(y_train),
     )
 
-    pred = model.predict(x_test)
-    pred = np.expm1(pred)
-    pred = np.maximum(pred, 0.0)
+    pred_log = model.predict(x_test)
 
-    y_test_inv = np.expm1(y_test)
-
-    m = metrics(y_test_inv, pred)
+    m = evaluate_predictions(y_test, pred_log)
+    m["model"] = model_name
+    m["model_type"] = "single_species"
     m["species"] = species_name
     m["train_rows"] = int(len(train))
     m["test_rows"] = int(len(test))
 
     safe_name = species_name.lower()
-    path = MODEL_DIR / f"species_model_{safe_name}.joblib"
-    path.parent.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(
-        {
-            "model": model,
-            "species": species_name,
-            "features": FEATURES,
-            "target": SPECIES_TARGET,
-            "log_target": True,
-            "model_type": "single_species",
-            "weight_factor": SPECIES_WEIGHT_FACTOR,
-        },
-        path,
+    payload = {
+        "model": model,
+        "species": species_name,
+        "features": FEATURES,
+        "target": SPECIES_TARGET,
+        "log_target": True,
+        "model_name": model_name,
+        "model_type": "single_species",
+    }
+
+    save_payload(
+        payload,
+        MODEL_DIR / f"species_model_{safe_name}_{model_name}.joblib",
     )
 
-    print(f"{species_name} species model saved:", path)
+    print(f"{species_name} species model:", model_name)
     print(m)
 
-
-def train_separate_species_models() -> None:
-    """Train one species-use model per species."""
-    df = prepare_species_table()
-    species_values = sorted(df["species"].dropna().unique().tolist())
-
-    for species_name in species_values:
-        train_single_species_model(species_name, df)
+    return m
 
 
-def train_fishing_model() -> None:
-    """Train fishing-activity model with HistGradientBoosting."""
-    df = load_table("fishing_training")
+def save_metrics(rows: list[dict]) -> None:
+    """Save model comparison metrics."""
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
-    cols = [FISHING_TARGET] + FEATURES
-    df = df[cols + ["date"]].dropna(subset=cols).copy()
+    df = pd.DataFrame(rows)
+    path = METRICS_DIR / "species_model_comparison.csv"
 
-    df["_y"] = np.log1p(df[FISHING_TARGET])
+    df.to_csv(path, index=False)
 
-    train, test = split_time(df)
-
-    train = sample_by_year(train, 250_000)
-
-    if len(test) > 1_000_000:
-        test = test.sample(
-            n=1_000_000,
-            random_state=RANDOM_STATE,
-        )
-
-    x_train = train[FEATURES]
-    x_test = test[FEATURES]
-
-    y_train = train["_y"]
-    y_test = test["_y"]
-
-    model = HistGradientBoostingRegressor(
-        max_iter=FISHING_MAX_ITER,
-        learning_rate=FISHING_LEARNING_RATE,
-        max_leaf_nodes=FISHING_MAX_LEAF_NODES,
-        l2_regularization=0.1,
-        random_state=RANDOM_STATE,
-    )
-
-    model.fit(x_train, y_train)
-
-    pred = model.predict(x_test)
-    pred = np.expm1(pred)
-    pred = np.maximum(pred, 0.0)
-
-    y_test_inv = np.expm1(y_test)
-
-    m = metrics(y_test_inv, pred)
-    m["train_rows"] = int(len(train))
-    m["test_rows"] = int(len(test))
-
-    path = MODEL_DIR / "fishing_model.joblib"
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    joblib.dump(
-        {
-            "model": model,
-            "features": FEATURES,
-            "target": FISHING_TARGET,
-            "log_target": True,
-        },
-        path,
-    )
-
-    print("Fishing model saved:", path)
-    print(m)
+    print("Metrics saved:", path)
 
 
 def train_models() -> None:
-    """Train all baseline models."""
-    train_species_model()
-    train_separate_species_models()
-    # train_fishing_model()
+    """Train species models."""
+    df = prepare_species_table()
+    df = sample_training_rows(df)
+
+    species_values = sorted(df["species"].dropna().unique().tolist())
+
+    rows = []
+
+    for model_name in MODEL_NAMES:
+        rows.append(train_joint_species_model(df, model_name))
+
+        for species_name in species_values:
+            rows.append(
+                train_single_species_model(
+                    species_name=species_name,
+                    df=df,
+                    model_name=model_name,
+                )
+            )
+
+    save_metrics(rows)

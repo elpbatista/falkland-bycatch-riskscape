@@ -195,6 +195,76 @@ def species_list() -> list[str]:
 
 def build_species_training(static: pd.DataFrame) -> None:
     """Build species-use training table."""
+    species_values = pd.DataFrame({"species": species_list()})
+
+    for year in available_years("species_presence"):
+        species = load_partition("species_presence", year)
+        env = load_partition("environmental", year)
+
+        if env.empty:
+            continue
+
+        validate_columns(
+            env,
+            ["h3", "date"] + DYNAMIC_FEATURES,
+            "environmental",
+        )
+
+        if species.empty:
+            species = pd.DataFrame(
+                columns=["h3", "date", "species"] + SPECIES_SUPPORT
+            )
+        else:
+            validate_columns(
+                species,
+                ["h3", "date", "species"] + SPECIES_SUPPORT,
+                "species_presence",
+            )
+
+        species = species.copy()
+
+        # Calculate residence index as presence count divided by individual count^alpha
+
+        alpha = 0.5
+
+        species[SPECIES_TARGET] = (
+            species["presence_count"]
+            / np.power(species["individual_count"].clip(lower=1), alpha)
+        ).astype("float32")
+
+        # --------------------------------------------------------------------------------
+
+        keep = [
+            "h3",
+            "date",
+            "species",
+            SPECIES_TARGET,
+        ] + SPECIES_SUPPORT
+
+        base = env[["h3", "date"]].copy()
+        base = base.merge(species_values, how="cross")
+
+        df = base.merge(
+            species[keep],
+            on=["h3", "date", "species"],
+            how="left",
+        )
+
+        df[SPECIES_TARGET] = df[SPECIES_TARGET].fillna(0.0).astype("float32")
+        df["presence_count"] = df["presence_count"].fillna(0).astype("int32")
+        df["individual_count"] = df["individual_count"].fillna(0).astype("int32")
+        df["trip_count"] = df["trip_count"].fillna(0).astype("int32")
+
+        df = join_features(df, env, static)
+        df = df[keep + FEATURES]
+
+        path = save_partition(df, "species_training", year)
+        print(f"Saved: {path}")
+        print(f"Rows: {len(df)}")
+
+
+def build_species_training(static: pd.DataFrame) -> None:
+    """Build species-use training table."""
     for year in available_years("species_presence"):
         species = load_partition("species_presence", year)
         env = load_partition("environmental", year)
@@ -209,7 +279,6 @@ def build_species_training(static: pd.DataFrame) -> None:
         )
 
         species = species.copy()
-
         species[SPECIES_TARGET] = species["presence_count"].astype("float32")
 
         keep = [
@@ -219,64 +288,35 @@ def build_species_training(static: pd.DataFrame) -> None:
             SPECIES_TARGET,
         ] + SPECIES_SUPPORT
 
-        df = join_features(species[keep], env, static)
+        observed_species_dates = (
+            species[["date", "species"]]
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
+
+        grid_dates = env[["h3", "date"]].drop_duplicates()
+
+        base = grid_dates.merge(
+            observed_species_dates,
+            on="date",
+            how="inner",
+        )
+
+        df = base.merge(
+            species[keep],
+            on=["h3", "date", "species"],
+            how="left",
+        )
+
+        df[SPECIES_TARGET] = df[SPECIES_TARGET].fillna(0.0).astype("float32")
+        df["presence_count"] = df["presence_count"].fillna(0).astype("int32")
+        df["individual_count"] = df["individual_count"].fillna(0).astype("int32")
+        df["trip_count"] = df["trip_count"].fillna(0).astype("int32")
+
+        df = join_features(df, env, static)
         df = df[keep + FEATURES]
 
         path = save_partition(df, "species_training", year)
-        print(f"Saved: {path}")
-        print(f"Rows: {len(df)}")
-
-
-def build_fishing_training(static: pd.DataFrame) -> None:
-    """Build fishing activity training table."""
-    for year in available_years("environmental"):
-        env = load_partition("environmental", year)
-
-        if env.empty:
-            continue
-
-        base = env[["h3", "date"]].copy()
-        df = join_features(base, env, static)
-
-        fishing = load_partition("fishing_effort", year)
-
-        if fishing.empty:
-            df["vessel_count"] = 0
-            df["fishing_hours"] = 0.0
-        else:
-            validate_columns(
-                fishing,
-                ["h3", "date"] + FISHING_SUPPORT,
-                "fishing_activity",
-            )
-
-            df = df.merge(
-                fishing[["h3", "date"] + FISHING_SUPPORT],
-                on=["h3", "date"],
-                how="left",
-            )
-
-            df["vessel_count"] = df["vessel_count"].fillna(0).astype("int32")
-            df["fishing_hours"] = df["fishing_hours"].fillna(0.0)
-
-        df[FISHING_TARGET] = 0.0
-
-        mask = df["vessel_count"] > 0
-        df.loc[mask, FISHING_TARGET] = (
-            df.loc[mask, "fishing_hours"] / df.loc[mask, "vessel_count"]
-        )
-
-        df[FISHING_TARGET] = df[FISHING_TARGET].astype("float32")
-
-        keep = [
-            "h3",
-            "date",
-            FISHING_TARGET,
-        ] + FISHING_SUPPORT + FEATURES
-
-        df = df[keep]
-
-        path = save_partition(df, "fishing_training", year)
         print(f"Saved: {path}")
         print(f"Rows: {len(df)}")
 
