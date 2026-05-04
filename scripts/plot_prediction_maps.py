@@ -22,6 +22,13 @@ def main() -> int:
             agg="mean",
         )
 
+    plot_prediction_map(
+        year=year,
+        value_col="fishing_activity",
+        agg="mean",
+    )
+        
+
     return 0
 
 
