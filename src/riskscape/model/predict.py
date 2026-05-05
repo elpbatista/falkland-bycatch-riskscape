@@ -833,15 +833,16 @@ def predict_models() -> None:
         bayesian_payloads = load_product_payloads(HYBRID_BAYESIAN_MODEL_NAME)
         support_tables = load_hybrid_support()
 
-        for year in available_years("environmental"):
-            print(f"\n=== Loading feature_grid once for year {year} ===")
-            base = prepare_prediction_base(year)
+        for product_name in PREDICTION_PRODUCTS:
+            print(f"Prediction product: {product_name}")
 
-            if base.empty:
-                continue
+            for year in available_years("environmental"):
+                print(f"\n=== Loading feature_grid once for year {year} ===")
+                base = prepare_prediction_base(year)
 
-            for product_name in PREDICTION_PRODUCTS:
-                print(f"Prediction product: {product_name}")
+                if base.empty:
+                    continue
+
                 predict_hybrid_product_year(
                     base=base,
                     model_name=model_name,
@@ -854,27 +855,24 @@ def predict_models() -> None:
 
         return
 
-    payloads_by_model = {
-        model_name: load_product_payloads(model_name)
-        for model_name in model_names
-    }
+    for model_name in model_names:
+        print(f"\n=== Predicting with model: {prediction_model_name(model_name)} ===")
+        payloads = load_product_payloads(model_name)
 
-    for year in available_years("environmental"):
-        print(f"\n=== Loading feature_grid once for year {year} ===")
-        base = prepare_prediction_base(year)
+        for product_name in PREDICTION_PRODUCTS:
+            print(f"Prediction product: {product_name}")
 
-        if base.empty:
-            continue
+            for year in available_years("environmental"):
+                print(f"\n=== Loading feature_grid once for year {year} ===")
+                base = prepare_prediction_base(year)
 
-        for model_name in model_names:
-            print(f"\n=== Predicting with model: {prediction_model_name(model_name)} ===")
+                if base.empty:
+                    continue
 
-            for product_name in PREDICTION_PRODUCTS:
-                print(f"Prediction product: {product_name}")
                 predict_product_year(
                     base=base,
                     model_name=model_name,
                     product_name=product_name,
-                    payload=payloads_by_model[model_name][product_name],
+                    payload=payloads[product_name],
                     year=year,
                 )

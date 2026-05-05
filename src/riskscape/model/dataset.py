@@ -371,6 +371,6 @@ def build_model_datasets() -> None:
     static = load_static()
 
     # build_feature_grid(static)
-    build_species_training(static)
+    # build_species_training(static)
     # build_prediction_grid(static)
     build_fishing_training(static)
