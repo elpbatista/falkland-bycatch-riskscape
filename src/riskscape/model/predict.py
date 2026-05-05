@@ -11,21 +11,48 @@ import pandas as pd
 from riskscape.config import paths
 from riskscape.model.dataset import (
     FEATURES,
+    FISHING_TARGET,
+    SPECIES_TARGET,
     available_years,
-    join_features,
     load_partition,
-    load_static,
     species_list,
 )
-
 from riskscape.model.train import MODEL_NAMES
 
-# PRIMARY_MODEL_NAME = "extra_trees"
-PRIMARY_MODEL_NAME = None
+
+# Prediction mode options:
+#   "single" -> run one model family selected by ACTIVE_MODEL_NAME
+#   "all"    -> run every model family listed in MODEL_NAMES
+#   "hybrid" -> combine one ML model and one Bayesian/GMM model
+PREDICTION_MODE = "all"
+
+# Used only when PREDICTION_MODE = "single".
+# ACTIVE_MODEL_NAME options (must match MODEL_NAMES from train.py):
+#   "hist_gradient_boosting"
+#   "random_forest"
+#   "extra_trees"
+#   "gmm"
+#   "bayesian_gmm"
+ACTIVE_MODEL_NAME = "extra_trees"
+
+# Used only when PREDICTION_MODE = "hybrid".
+HYBRID_ML_MODEL_NAME = "extra_trees"
+HYBRID_BAYESIAN_MODEL_NAME = "bayesian_gmm"
+
+# Hybrid strategy options:
+#   "constant"      -> fixed weighted blend
+#   "spatial_alpha" -> blend weight increases with historical cell support
+#   "conditional"   -> ML where historical support exists, Bayesian elsewhere
+#   "presence_gate" -> Bayesian/GMM likelihood gates ML intensity
+HYBRID_MODE = "constant"
+
+HYBRID_ALPHA = 0.8
+HYBRID_MIN_ALPHA = 0.1
+HYBRID_MAX_ALPHA = 0.9
+HYBRID_SUPPORT_K = 5.0
+HYBRID_SUPPORT_THRESHOLD = 1.0
 
 BATCH_ROWS = 250_000
-
-FISHING_TARGET = "fishing_activity"
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 PREDICTION_ROOT = paths["data"] / "modeling" / "predictions"
@@ -35,12 +62,11 @@ def load_model_payload(path: Path):
     """Load model payload."""
     if not path.exists():
         raise FileNotFoundError(f"Missing model: {path}")
-
     return joblib.load(path)
 
 
 def species_model_path(species: str, model_name: str) -> Path:
-    """Return selected single-species model path."""
+    """Return model path."""
     return (
         MODEL_DIR
         / model_name
@@ -52,7 +78,7 @@ def load_species_payloads(
     species_values: list[str],
     model_name: str,
 ) -> dict[str, dict]:
-    """Load one species model per species."""
+    """Load species models."""
     payloads = {}
 
     for species in species_values:
@@ -66,41 +92,70 @@ def load_species_payloads(
     return payloads
 
 
-def observed_fishing_path(year: int) -> Path:
-    """Return observed fishing modeling partition path."""
+def hybrid_output_name() -> str:
+    """Return hybrid output folder name."""
     return (
-        paths["data"]
-        / "modeling"
-        / "fishing_training"
-        / f"year={year}"
-        / "part.parquet"
+        f"hybrid_{HYBRID_MODE}_"
+        f"{HYBRID_ML_MODEL_NAME}_{HYBRID_BAYESIAN_MODEL_NAME}"
     )
 
 
-def load_observed_fishing(year: int) -> pd.DataFrame:
-    """Load observed fishing activity for one year."""
-    path = observed_fishing_path(year)
+def species_training_paths() -> list[Path]:
+    """Return species training partition paths."""
+    root = paths["data"] / "modeling" / "species_training"
+    return sorted(root.glob("year=*/part.parquet"))
 
-    if not path.exists():
-        return pd.DataFrame(columns=["h3", "date", FISHING_TARGET])
 
-    df = pd.read_parquet(path)
+def load_hybrid_support() -> dict[str, pd.DataFrame]:
+    """Load historical positive-use support by species and H3 cell."""
+    frames = []
 
-    return df[["h3", "date", FISHING_TARGET]].copy()
+    cols = ["h3", "species", SPECIES_TARGET]
+
+    for path in species_training_paths():
+        df = pd.read_parquet(path, columns=cols)
+        df = df[df[SPECIES_TARGET] > 0]
+
+        if not df.empty:
+            frames.append(df)
+
+    if not frames:
+        return {}
+
+    support = pd.concat(frames, ignore_index=True)
+    support = (
+        support
+        .groupby(["species", "h3"], as_index=False)
+        .agg(
+            support_count=(SPECIES_TARGET, "size"),
+            support_sum=(SPECIES_TARGET, "sum"),
+        )
+    )
+
+    out = {}
+
+    for species, group in support.groupby("species", sort=True):
+        out[species] = group[["h3", "support_count", "support_sum"]].copy()
+
+    return out
+
+
+def prediction_model_name(model_name: str) -> str:
+    """Return output model name."""
+    if model_name != "hybrid":
+        return model_name
+    return hybrid_output_name()
 
 
 def output_dir(model_name: str, year: int) -> Path:
-    """Return yearly prediction output directory."""
-    return PREDICTION_ROOT / model_name / f"year={year}"
+    return PREDICTION_ROOT / prediction_model_name(model_name) / f"year={year}"
 
 
 def merged_output_path(model_name: str, year: int) -> Path:
-    """Return merged yearly prediction output path."""
     return output_dir(model_name, year) / "part.parquet"
 
 
 def clean_output_dir(model_name: str, year: int) -> None:
-    """Remove existing prediction files for one year."""
     out_dir = output_dir(model_name, year)
 
     if not out_dir.exists():
@@ -115,13 +170,11 @@ def clean_output_dir(model_name: str, year: int) -> None:
 
 
 def iter_batches(df: pd.DataFrame, batch_rows: int):
-    """Yield dataframe batches."""
     for start in range(0, len(df), batch_rows):
         yield df.iloc[start:start + batch_rows].copy()
 
 
 def validate_model_features(species_payload) -> None:
-    """Validate model feature compatibility."""
     payload_features = species_payload.get("features", FEATURES)
 
     if list(payload_features) != list(FEATURES):
@@ -132,66 +185,133 @@ def validate_model_features(species_payload) -> None:
         )
 
 
-# def predict_species(
-#     batch: pd.DataFrame,
-#     species_payload,
-# ) -> np.ndarray:
-#     """Predict species use in model target space."""
-#     validate_model_features(species_payload)
+def feature_matrix(batch: pd.DataFrame) -> pd.DataFrame:
+    x = batch[FEATURES].replace([np.inf, -np.inf], np.nan)
 
-#     model = species_payload["model"]
+    if x.isna().any().any():
+        missing = x.columns[x.isna().any()].tolist()
+        raise ValueError(
+            "NaN values detected in prediction features. "
+            "Rebuild feature_grid with neighbor filling. "
+            f"Missing columns: {missing}"
+        )
 
-#     pred = model.predict(batch[FEATURES])
-#     pred = np.maximum(pred, 0.0)
+    return x
 
-#     return pred.astype("float32")
+# NEW FUNCTION: Drop prediction rows with invalid feature values
+def drop_invalid_prediction_rows(df: pd.DataFrame, year: int) -> pd.DataFrame:
+    """Drop prediction rows with invalid feature values."""
+    out = df.replace([np.inf, -np.inf], np.nan).copy()
+    mask = out[FEATURES].isna().any(axis=1)
+
+    if not mask.any():
+        return out
+
+    missing_counts = out.loc[mask, FEATURES].isna().sum()
+    missing_counts = missing_counts[missing_counts > 0].sort_values(
+        ascending=False,
+    )
+
+    print(
+        f"Dropping {int(mask.sum())} prediction rows for {year} "
+        "because feature values are missing."
+    )
+    print(missing_counts)
+
+    return out.loc[~mask].reset_index(drop=True)
 
 
 def predict_species(
     batch: pd.DataFrame,
     species_payload,
 ) -> np.ndarray:
-    """Predict species use in model target space."""
     validate_model_features(species_payload)
 
     model = species_payload["model"]
-
-    x = batch[FEATURES].replace([np.inf, -np.inf], np.nan)
-
-    if x.isna().any().any():
-        x = x.fillna(x.median(numeric_only=True))
-
-    pred = model.predict(x)
+    pred = model.predict(feature_matrix(batch))
     pred = np.maximum(pred, 0.0)
 
     return pred.astype("float32")
 
 
-def merge_year_parts(model_name: str, year: int) -> Path:
-    """Merge yearly prediction chunks into one partition."""
-    out_dir = output_dir(model_name, year)
-    parts = sorted(out_dir.glob("part-*.parquet"))
+def predict_hybrid_species(
+    batch: pd.DataFrame,
+    ml_payload,
+    bayesian_payload,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Predict ML and Bayesian species use."""
+    ml_pred = predict_species(batch, ml_payload)
+    bayesian_pred = predict_species(batch, bayesian_payload)
 
-    if not parts:
-        raise FileNotFoundError(f"No prediction chunks found for year {year}")
+    return ml_pred, bayesian_pred
 
-    frames = [pd.read_parquet(path) for path in parts]
-    df = pd.concat(frames, ignore_index=True)
 
-    out_file = merged_output_path(model_name, year)
-    df.to_parquet(out_file, index=False, compression="zstd")
+def add_support_columns(
+    df: pd.DataFrame,
+    support: pd.DataFrame | None,
+) -> pd.DataFrame:
+    """Add historical support columns to prediction rows."""
+    if support is None or support.empty:
+        out = df.copy()
+        out["support_count"] = 0.0
+        out["support_sum"] = 0.0
+        return out
 
-    for path in parts:
-        path.unlink()
+    out = df.merge(
+        support,
+        on="h3",
+        how="left",
+    )
 
-    return out_file
+    out["support_count"] = out["support_count"].fillna(0.0).astype("float32")
+    out["support_sum"] = out["support_sum"].fillna(0.0).astype("float32")
+
+    return out
+
+
+def hybrid_alpha(support_count: np.ndarray) -> np.ndarray:
+    """Return alpha values for hybrid prediction."""
+    support_count = support_count.astype("float32")
+
+    if HYBRID_MODE == "constant":
+        return np.full_like(
+            support_count,
+            HYBRID_ALPHA,
+            dtype="float32",
+        )
+
+    if HYBRID_MODE == "spatial_alpha":
+        alpha = support_count / (support_count + HYBRID_SUPPORT_K)
+        alpha = np.clip(alpha, HYBRID_MIN_ALPHA, HYBRID_MAX_ALPHA)
+        return alpha.astype("float32")
+
+    if HYBRID_MODE == "conditional":
+        alpha = np.where(
+            support_count >= HYBRID_SUPPORT_THRESHOLD,
+            1.0,
+            0.0,
+        )
+        return alpha.astype("float32")
+
+    raise ValueError(f"Unknown HYBRID_MODE: {HYBRID_MODE}")
+
+
+def blend_hybrid_predictions(
+    ml_pred: np.ndarray,
+    bayesian_pred: np.ndarray,
+    support_count: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Blend ML and Bayesian predictions using selected hybrid mode."""
+    alpha = hybrid_alpha(support_count)
+    pred = alpha * ml_pred + (1.0 - alpha) * bayesian_pred
+
+    return alpha.astype("float32"), pred.astype("float32")
 
 
 def build_species_predictions(
     batch: pd.DataFrame,
     species_payloads: dict[str, dict],
 ) -> pd.DataFrame:
-    """Predict all species for one batch."""
     frames = []
 
     for species, payload in species_payloads.items():
@@ -203,20 +323,153 @@ def build_species_predictions(
     return pd.concat(frames, ignore_index=True)
 
 
+def build_hybrid_species_predictions(
+    batch: pd.DataFrame,
+    ml_payloads: dict[str, dict],
+    bayesian_payloads: dict[str, dict],
+    support_tables: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    frames = []
+
+    for species, ml_payload in ml_payloads.items():
+        out = batch.copy()
+        out["species"] = species
+
+        support = support_tables.get(species)
+        out = add_support_columns(out, support)
+
+        bayesian_payload = bayesian_payloads[species]
+        ml_pred, bayesian_pred = predict_hybrid_species(
+            out,
+            ml_payload,
+            bayesian_payload,
+        )
+
+        alpha, hybrid_pred = blend_hybrid_predictions(
+            ml_pred,
+            bayesian_pred,
+            out["support_count"].to_numpy(dtype="float32"),
+        )
+
+        out["hybrid_alpha"] = alpha
+        out["species_use_ml_log_pred"] = ml_pred
+        out["species_use_bayesian_log_pred"] = bayesian_pred
+        out["species_use_log_pred"] = hybrid_pred
+        frames.append(out)
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def add_risk_columns(expanded: pd.DataFrame) -> pd.DataFrame:
+    has_fishing = expanded["fishing_activity"] > 0
+
+    risk_log = (
+        expanded["species_use_log_pred"]
+        + expanded["fishing_activity_log"]
+    )
+
+    expanded["risk_log_pred"] = risk_log.where(
+        has_fishing,
+        0.0,
+    ).astype("float32")
+
+    return expanded
+
+
+def output_columns(model_name: str) -> list[str]:
+    cols = [
+        "h3",
+        "date",
+        "species",
+        "species_use_log_pred",
+        "fishing_activity",
+        "fishing_activity_log",
+        "risk_log_pred",
+    ]
+
+    if model_name == "hybrid":
+        cols.insert(4, "hybrid_alpha")
+        cols.insert(5, "species_use_ml_log_pred")
+        cols.insert(6, "species_use_bayesian_log_pred")
+
+    return cols
+
+
+def load_observed_fishing(year: int) -> pd.DataFrame:
+    path = (
+        paths["data"]
+        / "modeling"
+        / "fishing_training"
+        / f"year={year}"
+        / "part.parquet"
+    )
+
+    if not path.exists():
+        return pd.DataFrame(columns=["h3", "date", FISHING_TARGET])
+
+    df = pd.read_parquet(path)
+    return df[["h3", "date", FISHING_TARGET]].copy()
+
+
+# NEW FUNCTION: Load prediction grid partition for a given year
+def load_prediction_grid(year: int) -> pd.DataFrame:
+    """Load one modeling prediction grid partition."""
+    path = (
+        paths["data"]
+        / "modeling"
+        / "prediction_grid"
+        / f"year={year}"
+        / "part.parquet"
+    )
+
+    if not path.exists():
+        return pd.DataFrame()
+
+    return pd.read_parquet(path)
+
+
+def merge_year_parts(model_name: str, year: int) -> Path:
+    out_dir = output_dir(model_name, year)
+    parts = sorted(out_dir.glob("part-*.parquet"))
+
+    if not parts:
+        raise FileNotFoundError(f"No chunks for year {year}")
+
+    frames = [pd.read_parquet(p) for p in parts]
+    df = pd.concat(frames, ignore_index=True)
+
+    out_file = merged_output_path(model_name, year)
+    df.to_parquet(out_file, index=False, compression="zstd")
+
+    for p in parts:
+        p.unlink()
+
+    return out_file
+
+
 def predict_year(
     model_name: str,
     year: int,
-    static: pd.DataFrame,
-    species_payloads: dict[str, dict],
+    species_payloads: dict[str, dict] | None = None,
+    ml_payloads: dict[str, dict] | None = None,
+    bayesian_payloads: dict[str, dict] | None = None,
+    support_tables: dict[str, pd.DataFrame] | None = None,
 ) -> None:
-    """Generate observed-fishing risk predictions for one year."""
-    env = load_partition("environmental", year)
+    base = load_prediction_grid(year)
 
-    if env.empty:
+    if base.empty:
+        print(f"Skipping {year}: prediction_grid partition not found or empty")
         return
 
-    base = env[["h3", "date"]].copy()
-    base = join_features(base, env, static)
+    missing = [c for c in FEATURES if c not in base.columns]
+    if missing:
+        raise ValueError(f"Missing features in prediction_grid: {missing}")
+
+    base = drop_invalid_prediction_rows(base, year)
+
+    if base.empty:
+        print(f"Skipping {year}: no valid prediction rows after dropping NaNs")
+        return
 
     fishing = load_observed_fishing(year)
 
@@ -239,47 +492,34 @@ def predict_year(
     for i, batch in enumerate(iter_batches(base, BATCH_ROWS)):
         fishing_activity = batch[FISHING_TARGET].to_numpy(dtype="float32")
 
-        fishing_activity_log = np.zeros_like(fishing_activity, dtype="float32")
+        fishing_log = np.zeros_like(fishing_activity)
         positive = fishing_activity > 0
-
-        fishing_activity_log[positive] = np.log1p(
-            fishing_activity[positive]
-        ).astype("float32")
+        fishing_log[positive] = np.log1p(fishing_activity[positive])
 
         batch = batch.copy()
         batch["fishing_activity"] = fishing_activity
-        batch["fishing_activity_log"] = fishing_activity_log
+        batch["fishing_activity_log"] = fishing_log
 
-        expanded = build_species_predictions(batch, species_payloads)
+        if model_name == "hybrid":
+            if support_tables is None:
+                raise ValueError("Hybrid prediction requires support tables")
 
-        has_fishing = expanded["fishing_activity"] > 0
-        risk_log = (
-            expanded["species_use_log_pred"]
-            + expanded["fishing_activity_log"]
-        )
+            expanded = build_hybrid_species_predictions(
+                batch,
+                ml_payloads,
+                bayesian_payloads,
+                support_tables,
+            )
+        else:
+            expanded = build_species_predictions(batch, species_payloads)
 
-        expanded["risk_log_pred"] = risk_log.where(
-            has_fishing,
-            0.0,
-        ).astype("float32")
-
-        out = expanded[
-            [
-                "h3",
-                "date",
-                "species",
-                "species_use_log_pred",   # hazard
-                "fishing_activity_log",   # exposure
-                "risk_log_pred",          # combined
-                "fishing_activity",
-            ]
-        ]
+        expanded = add_risk_columns(expanded)
+        out = expanded[output_columns(model_name)]
 
         out_file = out_dir / f"part-{i:05d}.parquet"
         out.to_parquet(out_file, index=False, compression="zstd")
 
-        print(f"Saved: {out_file}")
-        print(f"Rows: {len(out)}")
+        print(f"Saved: {out_file} | Rows: {len(out)}")
 
     merged = merge_year_parts(model_name, year)
     print(f"Merged: {merged}")
@@ -287,19 +527,46 @@ def predict_year(
 
 def selected_model_names() -> list[str]:
     """Return model names selected for prediction."""
-    if PRIMARY_MODEL_NAME is None:
+    if PREDICTION_MODE == "single":
+        return [ACTIVE_MODEL_NAME]
+
+    if PREDICTION_MODE == "all":
         return list(MODEL_NAMES)
 
-    return [PRIMARY_MODEL_NAME]
+    if PREDICTION_MODE == "hybrid":
+        return ["hybrid"]
+
+    raise ValueError(f"Unknown PREDICTION_MODE: {PREDICTION_MODE}")
 
 
 def predict_models() -> None:
-    """Generate full-grid historical risk predictions."""
-    static = load_static()
     species_values = species_list()
 
     for model_name in selected_model_names():
-        print(f"Predicting with model: {model_name}")
+        print(f"\n=== Predicting with model: {prediction_model_name(model_name)} ===")
+
+        if model_name == "hybrid":
+            ml_payloads = load_species_payloads(
+                species_values,
+                HYBRID_ML_MODEL_NAME,
+            )
+            bayesian_payloads = load_species_payloads(
+                species_values,
+                HYBRID_BAYESIAN_MODEL_NAME,
+            )
+            support_tables = load_hybrid_support()
+
+            for year in available_years("environmental"):
+                predict_year(
+                    model_name=model_name,
+                    year=year,
+                    ml_payloads=ml_payloads,
+                    bayesian_payloads=bayesian_payloads,
+                    support_tables=support_tables,
+                )
+
+            continue
+
         species_payloads = load_species_payloads(
             species_values,
             model_name,
@@ -309,6 +576,5 @@ def predict_models() -> None:
             predict_year(
                 model_name=model_name,
                 year=year,
-                static=static,
                 species_payloads=species_payloads,
             )

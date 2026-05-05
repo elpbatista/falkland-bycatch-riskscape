@@ -127,11 +127,6 @@ class GMMUseRegressor(BaseEstimator, RegressorMixin):
 
         return score * self.max_target
 
-    def predict_log_density(self, x):
-        """Return raw log-density for presence modeling."""
-        x_scaled = self.scaler.transform(x)
-        return self.gmm.score_samples(x_scaled)
-
 
 class BayesianGMMUseRegressor(GMMUseRegressor):
     """Estimate use from likelihood and a seasonal prior."""
@@ -167,11 +162,6 @@ class BayesianGMMUseRegressor(GMMUseRegressor):
         combined = 0.5 * likelihood + 0.5 * prior
 
         return combined
-
-    def predict_log_density(self, x):
-        """Return raw log-density for presence modeling."""
-        x_scaled = self.scaler.transform(x)
-        return self.gmm.score_samples(x_scaled)
 
 
 def load_table(name: str) -> pd.DataFrame:

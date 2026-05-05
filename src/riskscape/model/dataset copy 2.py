@@ -205,60 +205,6 @@ def load_neighbor_index() -> pd.DataFrame:
         out = df[["h3", "neighbors"]].copy()
         out = out.explode("neighbors")
         out = out.rename(columns={"neighbors": "neighbor_h3"})
-    elif "h3" in df.columns and any(col.startswith("n") for col in df.columns):
-        neighbor_cols = [
-            col for col in df.columns
-            if col.startswith("n") and col[1:].isdigit()
-        ]
-
-        out = df[["h3"] + neighbor_cols].melt(
-            id_vars="h3",
-            value_name="neighbor_h3",
-        )
-        out = out[["h3", "neighbor_h3"]]
-    elif "idx" in df.columns and any(col.startswith("n") for col in df.columns):
-        neighbor_cols = [
-            col for col in df.columns
-            if col.startswith("n") and col[1:].isdigit()
-        ]
-
-        grid = load_grid(uint64=True)
-        validate_columns(grid, ["h3"], "grid")
-        h3_values = (
-            grid["h3"]
-            .astype("uint64")
-            .sort_values()
-            .reset_index(drop=True)
-            .to_numpy()
-        )
-
-        neighbor_idx = df[["idx"] + neighbor_cols].melt(
-            id_vars="idx",
-            value_name="neighbor_idx",
-        )
-        neighbor_idx = neighbor_idx[neighbor_idx["neighbor_idx"] >= 0].copy()
-
-        max_idx = int(
-            max(
-                neighbor_idx["idx"].max(),
-                neighbor_idx["neighbor_idx"].max(),
-            )
-        )
-
-        if max_idx >= len(h3_values):
-            raise ValueError(
-                "Neighbor index refers to grid row outside loaded grid: "
-                f"{max_idx} >= {len(h3_values)}"
-            )
-
-        out = pd.DataFrame(
-            {
-                "h3": h3_values[neighbor_idx["idx"].to_numpy()],
-                "neighbor_h3": h3_values[
-                    neighbor_idx["neighbor_idx"].to_numpy()
-                ],
-            }
-        )
     else:
         neighbor_cols = [
             col for col in df.columns
@@ -267,8 +213,8 @@ def load_neighbor_index() -> pd.DataFrame:
 
         if not neighbor_cols:
             raise KeyError(
-                "Neighbor index must contain h3 plus neighbor_h3, neighbor, "
-                "neighbors, neighbor_* columns, or indexed idx/n* columns"
+                "Neighbor index must contain h3 plus neighbor_h3, "
+                "neighbor, neighbors, or neighbor_* columns"
             )
 
         out = df[["h3"] + neighbor_cols].melt(
@@ -288,75 +234,63 @@ def fill_features_from_neighbors(
     df: pd.DataFrame,
     feature_cols: list[str],
 ) -> pd.DataFrame:
-    """Preserve missing feature values for comparison runs."""
-    out = df.copy()
+    """Fill missing feature values from same-date H3 neighbors."""
     missing_cols = [col for col in feature_cols if df[col].isna().any()]
 
     if not missing_cols:
-        return out
+        return df
 
-    print(
-        "Neighbor feature filling is disabled. "
-        f"Columns with NaN values: {missing_cols}"
+    out = df.copy()
+    neighbors = load_neighbor_index()
+
+    missing_keys = (
+        out.loc[out[missing_cols].isna().any(axis=1), ["h3", "date"]]
+        .drop_duplicates()
+        .copy()
     )
 
-    # Neighbor filling is disabled for comparison runs.
-    # neighbors = load_neighbor_index()
-    #
-    # missing_keys = (
-    #     out.loc[out[missing_cols].isna().any(axis=1), ["h3", "date"]]
-    #     .drop_duplicates()
-    #     .copy()
-    # )
-    #
-    # neighbor_rows = missing_keys.merge(
-    #     neighbors,
-    #     on="h3",
-    #     how="left",
-    # )
-    #
-    # source = (
-    #     out[["h3", "date"] + missing_cols]
-    #     .drop_duplicates(subset=["h3", "date"])
-    #     .rename(columns={"h3": "neighbor_h3"})
-    # )
-    #
-    # neighbor_values = neighbor_rows.merge(
-    #     source,
-    #     on=["neighbor_h3", "date"],
-    #     how="left",
-    # )
-    #
-    # fill_values = (
-    #     neighbor_values
-    #     .groupby(["h3", "date"], as_index=False)[missing_cols]
-    #     .median()
-    # )
-    #
-    # out = out.merge(
-    #     fill_values,
-    #     on=["h3", "date"],
-    #     how="left",
-    #     suffixes=("", "_fill"),
-    # )
-    #
-    # for col in missing_cols:
-    #     fill_col = f"{col}_fill"
-    #     out[col] = out[col].fillna(out[fill_col])
-    #     out = out.drop(columns=fill_col)
+    neighbor_rows = missing_keys.merge(
+        neighbors,
+        on="h3",
+        how="left",
+    )
+
+    source = (
+        out[["h3", "date"] + missing_cols]
+        .drop_duplicates(subset=["h3", "date"])
+        .rename(columns={"h3": "neighbor_h3"})
+    )
+
+    neighbor_values = neighbor_rows.merge(
+        source,
+        on=["neighbor_h3", "date"],
+        how="left",
+    )
+
+    fill_values = (
+        neighbor_values
+        .groupby(["h3", "date"], as_index=False)[missing_cols]
+        .median()
+    )
+
+    out = out.merge(
+        fill_values,
+        on=["h3", "date"],
+        how="left",
+        suffixes=("", "_fill"),
+    )
+
+    for col in missing_cols:
+        fill_col = f"{col}_fill"
+        out[col] = out[col].fillna(out[fill_col])
+        out = out.drop(columns=fill_col)
 
     remaining = [col for col in feature_cols if out[col].isna().any()]
 
     if remaining:
-        # Keep unresolved rows for comparison runs. Training currently decides
-        # whether to drop rows with missing feature values.
-        # before = len(out)
-        # out = out.dropna(subset=feature_cols).copy()
-        # dropped = before - len(out)
-
-        print(
-            "Rows still have unresolved NaN values after H3 neighbor "
-            f"filling. Columns: {remaining}"
+        raise ValueError(
+            "Remaining NaN values after H3 neighbor filling: "
+            f"{remaining}"
         )
 
     return out
@@ -428,14 +362,12 @@ def build_species_training(static: pd.DataFrame) -> None:
 
         # Calculate residence index as presence count divided by individual count^alpha
 
-        alpha = 0.2
+        alpha = 0.5
 
         species[SPECIES_TARGET] = (
             species["presence_count"]
             / np.power(species["individual_count"].clip(lower=1), alpha)
         ).astype("float32")
-
-        # species[SPECIES_TARGET] = species["presence_count"].astype("float32")
 
         keep = [
             "h3",
@@ -484,17 +416,23 @@ def build_species_training(static: pd.DataFrame) -> None:
 
 def build_fishing_training(_static: pd.DataFrame) -> None:
     """Build fishing-activity training table."""
-    for year in available_years("environmental"):
-        env = load_partition("environmental", year)
+    for year in available_years("fishing_effort"):
         fishing = load_partition("fishing_effort", year)
+        env = load_partition("environmental", year)
 
         if env.empty:
             continue
 
-        validate_columns(env, ["h3", "date"], "environmental")
+        validate_columns(
+            env,
+            ["h3", "date"] + DYNAMIC_FEATURES,
+            "environmental",
+        )
 
         if fishing.empty:
-            fishing = pd.DataFrame(columns=["h3", "date"] + FISHING_SUPPORT)
+            fishing = pd.DataFrame(
+                columns=["h3", "date"] + FISHING_SUPPORT
+            )
         else:
             validate_columns(
                 fishing,
@@ -502,31 +440,43 @@ def build_fishing_training(_static: pd.DataFrame) -> None:
                 "fishing_effort",
             )
 
-        df = env[["h3", "date"]].drop_duplicates().copy()
-        df = df.merge(
-            fishing[["h3", "date"] + FISHING_SUPPORT],
-            on=["h3", "date"],
-            how="left",
-        )
-
-        df["vessel_count"] = df["vessel_count"].fillna(0).astype("int32")
-        df["fishing_hours"] = df["fishing_hours"].fillna(0.0).astype("float32")
+        fishing = fishing.copy()
 
         # Calculate fishing activity as fishing hours divided by vessel count^alpha
 
-        alpha = 0.2
+        alpha = 0.5
 
-        df[FISHING_TARGET] = (
-            df["fishing_hours"]
-            / np.power(df["vessel_count"].clip(lower=1), alpha)
+        fishing[FISHING_TARGET] = (
+            fishing["fishing_hours"]
+            / np.power(fishing["vessel_count"].clip(lower=1), alpha)
         ).astype("float32")
 
         keep = ["h3", "date", FISHING_TARGET] + FISHING_SUPPORT
 
-        df = df[keep].copy()
-        df["vessel_count"] = df["vessel_count"].astype("int32")
-        df["fishing_hours"] = df["fishing_hours"].astype("float32")
-        df[FISHING_TARGET] = df[FISHING_TARGET].astype("float32")
+        grid_dates = env[["h3", "date"]].drop_duplicates()
+        observed_fishing_dates = (
+            fishing[["date"]]
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
+
+        base = grid_dates.merge(
+            observed_fishing_dates,
+            on="date",
+            how="inner",
+        )
+
+        df = base.merge(
+            fishing[keep],
+            on=["h3", "date"],
+            how="left",
+        )
+
+        df[FISHING_TARGET] = df[FISHING_TARGET].fillna(0.0).astype("float32")
+        df["vessel_count"] = df["vessel_count"].fillna(0).astype("int32")
+        df["fishing_hours"] = df["fishing_hours"].fillna(0).astype("float32")
+
+        df = df[keep]
 
         path = save_partition(df, "fishing_training", year)
         print(f"Saved: {path}")
@@ -557,7 +507,7 @@ def build_model_datasets() -> None:
     """Build all model-ready datasets."""
     static = load_static()
 
-    # build_feature_grid(static)
+    build_feature_grid(static)
     build_species_training(static)
-    # build_prediction_grid(static)
+    build_prediction_grid(static)
     build_fishing_training(static)
