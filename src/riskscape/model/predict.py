@@ -14,8 +14,7 @@ from riskscape.model.dataset import (
     FISHING_TARGET,
     SPECIES_TARGET,
     available_years,
-    load_partition,
-    species_list,
+    load_feature_grid,
 )
 from riskscape.model.train import MODEL_NAMES
 
@@ -53,6 +52,7 @@ HYBRID_SUPPORT_K = 5.0
 HYBRID_SUPPORT_THRESHOLD = 1.0
 
 BATCH_ROWS = 250_000
+PREDICTION_PRODUCTS = ["joint", "bbal", "safs"]
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 PREDICTION_ROOT = paths["data"] / "modeling" / "predictions"
@@ -72,6 +72,35 @@ def species_model_path(species: str, model_name: str) -> Path:
         / model_name
         / f"species_model_{species.lower()}.joblib"
     )
+
+
+def product_model_path(product_name: str, model_name: str) -> Path:
+    """Return product model path."""
+    return (
+        MODEL_DIR
+        / model_name
+        / f"species_model_{product_name}.joblib"
+    )
+
+
+def load_product_payloads(model_name: str) -> dict[str, dict]:
+    """Load joint, BBAL, and SAFS product models."""
+    payloads = {}
+
+    for product_name in PREDICTION_PRODUCTS:
+        path = product_model_path(product_name, model_name)
+        payload = load_model_payload(path)
+        validate_model_features(payload)
+        payloads[product_name] = payload
+
+        payload_model_name = payload.get("model_name", "unknown")
+        payload_model_type = payload.get("model_type", "unknown")
+        print(
+            f"Loaded {product_name} model: "
+            f"{payload_model_name} ({payload_model_type})"
+        )
+
+    return payloads
 
 
 def load_species_payloads(
@@ -151,8 +180,29 @@ def output_dir(model_name: str, year: int) -> Path:
     return PREDICTION_ROOT / prediction_model_name(model_name) / f"year={year}"
 
 
+def product_output_dir(
+    model_name: str,
+    product_name: str,
+    year: int,
+) -> Path:
+    return (
+        PREDICTION_ROOT
+        / prediction_model_name(model_name)
+        / product_name
+        / f"year={year}"
+    )
+
+
 def merged_output_path(model_name: str, year: int) -> Path:
     return output_dir(model_name, year) / "part.parquet"
+
+
+def product_merged_output_path(
+    model_name: str,
+    product_name: str,
+    year: int,
+) -> Path:
+    return product_output_dir(model_name, product_name, year) / "part.parquet"
 
 
 def clean_output_dir(model_name: str, year: int) -> None:
@@ -165,6 +215,24 @@ def clean_output_dir(model_name: str, year: int) -> None:
         path.unlink()
 
     merged = merged_output_path(model_name, year)
+    if merged.exists():
+        merged.unlink()
+
+
+def clean_product_output_dir(
+    model_name: str,
+    product_name: str,
+    year: int,
+) -> None:
+    out_dir = product_output_dir(model_name, product_name, year)
+
+    if not out_dir.exists():
+        return
+
+    for path in out_dir.glob("part-*.parquet"):
+        path.unlink()
+
+    merged = product_merged_output_path(model_name, product_name, year)
     if merged.exists():
         merged.unlink()
 
@@ -323,6 +391,104 @@ def build_species_predictions(
     return pd.concat(frames, ignore_index=True)
 
 
+def build_joint_predictions(
+    batch: pd.DataFrame,
+    payload: dict,
+) -> pd.DataFrame:
+    """Predict all species from one joint model payload."""
+    validate_model_features(payload)
+
+    encoder = payload["encoder"]
+    model = payload["model"]
+    frames = []
+
+    for species in encoder.categories_[0]:
+        out = batch.copy()
+        out["species"] = species
+
+        x_species = encoder.transform(out[["species"]])
+        x_features = feature_matrix(out).to_numpy()
+        x = np.hstack([x_species, x_features])
+
+        pred = model.predict(x)
+        out["species_use_log_pred"] = np.maximum(pred, 0.0).astype("float32")
+        frames.append(out)
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_product_predictions(
+    batch: pd.DataFrame,
+    product_name: str,
+    payload: dict,
+) -> pd.DataFrame:
+    """Predict one product payload."""
+    if payload.get("model_type") == "joint_species":
+        return build_joint_predictions(batch, payload)
+
+    species = payload.get("species", product_name.upper())
+    return build_species_predictions(batch, {species: payload})
+
+
+def add_support_by_species(
+    df: pd.DataFrame,
+    support_tables: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Add historical support to rows grouped by species."""
+    frames = []
+
+    for species, group in df.groupby("species", sort=False):
+        support = support_tables.get(species)
+        frames.append(add_support_columns(group, support))
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_hybrid_product_predictions(
+    batch: pd.DataFrame,
+    product_name: str,
+    ml_payload: dict,
+    bayesian_payload: dict,
+    support_tables: dict[str, pd.DataFrame],
+) -> pd.DataFrame:
+    """Predict one hybrid product payload pair."""
+    ml_out = build_product_predictions(batch, product_name, ml_payload)
+    bayesian_out = build_product_predictions(
+        batch,
+        product_name,
+        bayesian_payload,
+    )
+
+    out = ml_out.rename(
+        columns={"species_use_log_pred": "species_use_ml_log_pred"}
+    )
+    bayesian_values = bayesian_out[
+        ["h3", "date", "species", "species_use_log_pred"]
+    ].rename(
+        columns={
+            "species_use_log_pred": "species_use_bayesian_log_pred",
+        }
+    )
+
+    out = out.merge(
+        bayesian_values,
+        on=["h3", "date", "species"],
+        how="inner",
+    )
+    out = add_support_by_species(out, support_tables)
+
+    alpha, hybrid_pred = blend_hybrid_predictions(
+        out["species_use_ml_log_pred"].to_numpy(dtype="float32"),
+        out["species_use_bayesian_log_pred"].to_numpy(dtype="float32"),
+        out["support_count"].to_numpy(dtype="float32"),
+    )
+
+    out["hybrid_alpha"] = alpha
+    out["species_use_log_pred"] = hybrid_pred
+
+    return out
+
+
 def build_hybrid_species_predictions(
     batch: pd.DataFrame,
     ml_payloads: dict[str, dict],
@@ -413,19 +579,8 @@ def load_observed_fishing(year: int) -> pd.DataFrame:
 
 # NEW FUNCTION: Load prediction grid partition for a given year
 def load_prediction_grid(year: int) -> pd.DataFrame:
-    """Load one modeling prediction grid partition."""
-    path = (
-        paths["data"]
-        / "modeling"
-        / "prediction_grid"
-        / f"year={year}"
-        / "part.parquet"
-    )
-
-    if not path.exists():
-        return pd.DataFrame()
-
-    return pd.read_parquet(path)
+    """Load one modeling feature grid partition."""
+    return load_feature_grid(year)
 
 
 def merge_year_parts(model_name: str, year: int) -> Path:
@@ -447,6 +602,75 @@ def merge_year_parts(model_name: str, year: int) -> Path:
     return out_file
 
 
+def merge_product_year_parts(
+    model_name: str,
+    product_name: str,
+    year: int,
+) -> Path:
+    out_dir = product_output_dir(model_name, product_name, year)
+    parts = sorted(out_dir.glob("part-*.parquet"))
+
+    if not parts:
+        raise FileNotFoundError(
+            f"No chunks for {prediction_model_name(model_name)}/"
+            f"{product_name} year {year}"
+        )
+
+    frames = [pd.read_parquet(p) for p in parts]
+    df = pd.concat(frames, ignore_index=True)
+
+    out_file = product_merged_output_path(model_name, product_name, year)
+    df.to_parquet(out_file, index=False, compression="zstd")
+
+    for p in parts:
+        p.unlink()
+
+    return out_file
+
+
+def prepare_prediction_base(year: int) -> pd.DataFrame:
+    """Load feature grid once and add fishing exposure."""
+    base = load_prediction_grid(year)
+
+    if base.empty:
+        print(f"Skipping {year}: feature_grid partition not found or empty")
+        return base
+
+    missing = [c for c in FEATURES if c not in base.columns]
+    if missing:
+        raise ValueError(f"Missing features in feature_grid: {missing}")
+
+    base = drop_invalid_prediction_rows(base, year)
+
+    if base.empty:
+        print(f"Skipping {year}: no valid prediction rows after dropping NaNs")
+        return base
+
+    fishing = load_observed_fishing(year)
+
+    base = base.merge(
+        fishing,
+        on=["h3", "date"],
+        how="left",
+    )
+
+    base[FISHING_TARGET] = (
+        base[FISHING_TARGET]
+        .fillna(0.0)
+        .astype("float32")
+    )
+
+    fishing_activity = base[FISHING_TARGET].to_numpy(dtype="float32")
+    fishing_log = np.zeros_like(fishing_activity)
+    positive = fishing_activity > 0
+    fishing_log[positive] = np.log1p(fishing_activity[positive])
+
+    base["fishing_activity"] = fishing_activity
+    base["fishing_activity_log"] = fishing_log
+
+    return base
+
+
 def predict_year(
     model_name: str,
     year: int,
@@ -458,12 +682,12 @@ def predict_year(
     base = load_prediction_grid(year)
 
     if base.empty:
-        print(f"Skipping {year}: prediction_grid partition not found or empty")
+        print(f"Skipping {year}: feature_grid partition not found or empty")
         return
 
     missing = [c for c in FEATURES if c not in base.columns]
     if missing:
-        raise ValueError(f"Missing features in prediction_grid: {missing}")
+        raise ValueError(f"Missing features in feature_grid: {missing}")
 
     base = drop_invalid_prediction_rows(base, year)
 
@@ -525,6 +749,66 @@ def predict_year(
     print(f"Merged: {merged}")
 
 
+def predict_product_year(
+    base: pd.DataFrame,
+    model_name: str,
+    product_name: str,
+    payload: dict,
+    year: int,
+) -> None:
+    """Predict one product using a pre-loaded feature grid."""
+    clean_product_output_dir(model_name, product_name, year)
+    out_dir = product_output_dir(model_name, product_name, year)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for i, batch in enumerate(iter_batches(base, BATCH_ROWS)):
+        expanded = build_product_predictions(batch, product_name, payload)
+        expanded = add_risk_columns(expanded)
+        out = expanded[output_columns(model_name)]
+
+        out_file = out_dir / f"part-{i:05d}.parquet"
+        out.to_parquet(out_file, index=False, compression="zstd")
+
+        print(f"Saved: {out_file} | Rows: {len(out)}")
+
+    merged = merge_product_year_parts(model_name, product_name, year)
+    print(f"Merged: {merged}")
+
+
+def predict_hybrid_product_year(
+    base: pd.DataFrame,
+    model_name: str,
+    product_name: str,
+    ml_payload: dict,
+    bayesian_payload: dict,
+    support_tables: dict[str, pd.DataFrame],
+    year: int,
+) -> None:
+    """Predict one hybrid product using a pre-loaded feature grid."""
+    clean_product_output_dir(model_name, product_name, year)
+    out_dir = product_output_dir(model_name, product_name, year)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for i, batch in enumerate(iter_batches(base, BATCH_ROWS)):
+        expanded = build_hybrid_product_predictions(
+            batch,
+            product_name,
+            ml_payload,
+            bayesian_payload,
+            support_tables,
+        )
+        expanded = add_risk_columns(expanded)
+        out = expanded[output_columns("hybrid")]
+
+        out_file = out_dir / f"part-{i:05d}.parquet"
+        out.to_parquet(out_file, index=False, compression="zstd")
+
+        print(f"Saved: {out_file} | Rows: {len(out)}")
+
+    merged = merge_product_year_parts(model_name, product_name, year)
+    print(f"Merged: {merged}")
+
+
 def selected_model_names() -> list[str]:
     """Return model names selected for prediction."""
     if PREDICTION_MODE == "single":
@@ -540,41 +824,57 @@ def selected_model_names() -> list[str]:
 
 
 def predict_models() -> None:
-    species_values = species_list()
+    model_names = selected_model_names()
 
-    for model_name in selected_model_names():
+    if model_names == ["hybrid"]:
+        model_name = "hybrid"
         print(f"\n=== Predicting with model: {prediction_model_name(model_name)} ===")
-
-        if model_name == "hybrid":
-            ml_payloads = load_species_payloads(
-                species_values,
-                HYBRID_ML_MODEL_NAME,
-            )
-            bayesian_payloads = load_species_payloads(
-                species_values,
-                HYBRID_BAYESIAN_MODEL_NAME,
-            )
-            support_tables = load_hybrid_support()
-
-            for year in available_years("environmental"):
-                predict_year(
-                    model_name=model_name,
-                    year=year,
-                    ml_payloads=ml_payloads,
-                    bayesian_payloads=bayesian_payloads,
-                    support_tables=support_tables,
-                )
-
-            continue
-
-        species_payloads = load_species_payloads(
-            species_values,
-            model_name,
-        )
+        ml_payloads = load_product_payloads(HYBRID_ML_MODEL_NAME)
+        bayesian_payloads = load_product_payloads(HYBRID_BAYESIAN_MODEL_NAME)
+        support_tables = load_hybrid_support()
 
         for year in available_years("environmental"):
-            predict_year(
-                model_name=model_name,
-                year=year,
-                species_payloads=species_payloads,
-            )
+            print(f"\n=== Loading feature_grid once for year {year} ===")
+            base = prepare_prediction_base(year)
+
+            if base.empty:
+                continue
+
+            for product_name in PREDICTION_PRODUCTS:
+                print(f"Prediction product: {product_name}")
+                predict_hybrid_product_year(
+                    base=base,
+                    model_name=model_name,
+                    product_name=product_name,
+                    ml_payload=ml_payloads[product_name],
+                    bayesian_payload=bayesian_payloads[product_name],
+                    support_tables=support_tables,
+                    year=year,
+                )
+
+        return
+
+    payloads_by_model = {
+        model_name: load_product_payloads(model_name)
+        for model_name in model_names
+    }
+
+    for year in available_years("environmental"):
+        print(f"\n=== Loading feature_grid once for year {year} ===")
+        base = prepare_prediction_base(year)
+
+        if base.empty:
+            continue
+
+        for model_name in model_names:
+            print(f"\n=== Predicting with model: {prediction_model_name(model_name)} ===")
+
+            for product_name in PREDICTION_PRODUCTS:
+                print(f"Prediction product: {product_name}")
+                predict_product_year(
+                    base=base,
+                    model_name=model_name,
+                    product_name=product_name,
+                    payload=payloads_by_model[model_name][product_name],
+                    year=year,
+                )
