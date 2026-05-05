@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from curses import raw
 from pathlib import Path
 
 import pandas as pd
@@ -194,6 +195,8 @@ def species_list() -> list[str]:
 
 def build_species_training(static: pd.DataFrame) -> None:
     """Build species-use training table."""
+    species_values = pd.DataFrame({"species": species_list()})
+
     for year in available_years("species_presence"):
         species = load_partition("species_presence", year)
         env = load_partition("environmental", year)
@@ -229,6 +232,8 @@ def build_species_training(static: pd.DataFrame) -> None:
             / np.power(species["individual_count"].clip(lower=1), alpha)
         ).astype("float32")
 
+        # --------------------------------------------------------------------------------
+
         keep = [
             "h3",
             "date",
@@ -236,19 +241,8 @@ def build_species_training(static: pd.DataFrame) -> None:
             SPECIES_TARGET,
         ] + SPECIES_SUPPORT
 
-        observed_species_dates = (
-            species[["date", "species"]]
-            .drop_duplicates()
-            .reset_index(drop=True)
-        )
-
-        grid_dates = env[["h3", "date"]].drop_duplicates()
-
-        base = grid_dates.merge(
-            observed_species_dates,
-            on="date",
-            how="inner",
-        )
+        base = env[["h3", "date"]].copy()
+        base = base.merge(species_values, how="cross")
 
         df = base.merge(
             species[keep],
@@ -268,73 +262,63 @@ def build_species_training(static: pd.DataFrame) -> None:
         print(f"Saved: {path}")
         print(f"Rows: {len(df)}")
 
-def build_fishing_training(_static: pd.DataFrame) -> None:
-    """Build fishing-activity training table."""
-    for year in available_years("fishing_effort"):
-        fishing = load_partition("fishing_effort", year)
-        env = load_partition("environmental", year)
 
-        if env.empty:
-            continue
+# def build_species_training(static: pd.DataFrame) -> None:
+#     """Build species-use training table."""
+#     for year in available_years("species_presence"):
+#         species = load_partition("species_presence", year)
+#         env = load_partition("environmental", year)
 
-        validate_columns(
-            env,
-            ["h3", "date"] + DYNAMIC_FEATURES,
-            "environmental",
-        )
+#         if species.empty or env.empty:
+#             continue
 
-        if fishing.empty:
-            fishing = pd.DataFrame(
-                columns=["h3", "date"] + FISHING_SUPPORT
-            )
-        else:
-            validate_columns(
-                fishing,
-                ["h3", "date"] + FISHING_SUPPORT,
-                "fishing_effort",
-            )
+#         validate_columns(
+#             species,
+#             ["h3", "date", "species"] + SPECIES_SUPPORT,
+#             "species_presence",
+#         )
 
-        fishing = fishing.copy()
+#         species = species.copy()
+#         species[SPECIES_TARGET] = species["presence_count"].astype("float32")
 
-        # Calculate fishing activity as fishing hours divided by vessel count^alpha
+#         keep = [
+#             "h3",
+#             "date",
+#             "species",
+#             SPECIES_TARGET,
+#         ] + SPECIES_SUPPORT
 
-        alpha = 0.5
+#         observed_species_dates = (
+#             species[["date", "species"]]
+#             .drop_duplicates()
+#             .reset_index(drop=True)
+#         )
 
-        fishing[FISHING_TARGET] = (
-            fishing["fishing_hours"]
-            / np.power(fishing["vessel_count"].clip(lower=1), alpha)
-        ).astype("float32")
+#         grid_dates = env[["h3", "date"]].drop_duplicates()
 
-        keep = ["h3", "date", FISHING_TARGET] + FISHING_SUPPORT
+#         base = grid_dates.merge(
+#             observed_species_dates,
+#             on="date",
+#             how="inner",
+#         )
 
-        grid_dates = env[["h3", "date"]].drop_duplicates()
-        observed_fishing_dates = (
-            fishing[["date"]]
-            .drop_duplicates()
-            .reset_index(drop=True)
-        )
+#         df = base.merge(
+#             species[keep],
+#             on=["h3", "date", "species"],
+#             how="left",
+#         )
 
-        base = grid_dates.merge(
-            observed_fishing_dates,
-            on="date",
-            how="inner",
-        )
+#         df[SPECIES_TARGET] = df[SPECIES_TARGET].fillna(0.0).astype("float32")
+#         df["presence_count"] = df["presence_count"].fillna(0).astype("int32")
+#         df["individual_count"] = df["individual_count"].fillna(0).astype("int32")
+#         df["trip_count"] = df["trip_count"].fillna(0).astype("int32")
 
-        df = base.merge(
-            fishing[keep],
-            on=["h3", "date"],
-            how="left",
-        )
+#         df = join_features(df, env, static)
+#         df = df[keep + FEATURES]
 
-        df[FISHING_TARGET] = df[FISHING_TARGET].fillna(0.0).astype("float32")
-        df["vessel_count"] = df["vessel_count"].fillna(0).astype("int32")
-        df["fishing_hours"] = df["fishing_hours"].fillna(0).astype("float32")
-
-        df = df[keep]
-
-        path = save_partition(df, "fishing_training", year)
-        print(f"Saved: {path}")
-        print(f"Rows: {len(df)}")
+#         path = save_partition(df, "species_training", year)
+#         print(f"Saved: {path}")
+#         print(f"Rows: {len(df)}")
 
 
 def build_prediction_grid(static: pd.DataFrame) -> None:
@@ -363,6 +347,6 @@ def build_model_datasets() -> None:
     """Build all model-ready datasets."""
     static = load_static()
 
-    # build_species_training(static)
+    build_species_training(static)
+    # build_fishing_training(static)
     # build_prediction_grid(static)
-    build_fishing_training(static)

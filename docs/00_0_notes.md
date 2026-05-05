@@ -48,10 +48,16 @@ The species-use model produced very similar spatial predictions for BBAL and SAF
 
 ```
 
-Joint species model saved: /Users/pb/Work/OSU/CapstoneProject/bycatch-riskscape/data/modeling/models/species_model.joblib
-{'r2': -0.3750467813453888, 'rmse': 10.792053080025694, 'mae': 2.84695716031283, 'train_rows': 7639, 'test_rows': 2546}
-BBAL species model saved: /Users/pb/Work/OSU/CapstoneProject/bycatch-riskscape/data/modeling/models/species_model_bbal.joblib
-{'r2': 0.7435731749852437, 'rmse': 20.34022408773636, 'mae': 3.711006998479471, 'species': 'BBAL', 'train_rows': 3370, 'test_rows': 1123}
-SAFS species model saved: /Users/pb/Work/OSU/CapstoneProject/bycatch-riskscape/data/modeling/models/species_model_safs.joblib
-{'r2': 0.718534843872827, 'rmse': 3.083809161861689, 'mae': 2.0280969776015296, 'species': 'SAFS', 'train_rows': 4269, 'test_rows': 1423}
-pb@Pilar bycatch-riskscape % python3 scripts/predict_models.py
+## Three modeling approaches
+
+1. Machine learning (Extra Trees), which directly learns nonlinear relationships between environmental conditions and species-use intensity.
+
+2. Density-based models (Gaussian Mixture Models), which estimate the environmental distribution of observed species-use locations.
+
+3. A Bayesian likelihood framework, where the probability of species use is inferred from the likelihood of environmental conditions given observed use, optionally combined with ecological priors.
+
+This comparison highlights the trade-off between predictive performance (ML) and interpretability and theoretical grounding (Bayesian likelihood).
+
+`Final hazard = α *ML + (1 - α)* Bayesian`
+
+combine ML + Bayesian into a single hybrid model

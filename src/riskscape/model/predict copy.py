@@ -11,6 +11,7 @@ import pandas as pd
 from riskscape.config import paths
 from riskscape.model.dataset import (
     FEATURES,
+    FISHING_TARGET,
     available_years,
     join_features,
     load_partition,
@@ -18,14 +19,9 @@ from riskscape.model.dataset import (
     species_list,
 )
 
-from riskscape.model.train import MODEL_NAMES
-
-# PRIMARY_MODEL_NAME = "extra_trees"
-PRIMARY_MODEL_NAME = None
+from riskscape.model.train import PRIMARY_MODEL_NAME
 
 BATCH_ROWS = 250_000
-
-FISHING_TARGET = "fishing_activity"
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 PREDICTION_ROOT = paths["data"] / "modeling" / "predictions"
@@ -39,29 +35,25 @@ def load_model_payload(path: Path):
     return joblib.load(path)
 
 
-def species_model_path(species: str, model_name: str) -> Path:
+def species_model_path(species: str) -> Path:
     """Return selected single-species model path."""
     return (
         MODEL_DIR
-        / model_name
-        / f"species_model_{species.lower()}.joblib"
+        / f"species_model_{species.lower()}_{PRIMARY_MODEL_NAME}.joblib"
     )
 
 
-def load_species_payloads(
-    species_values: list[str],
-    model_name: str,
-) -> dict[str, dict]:
+def load_species_payloads(species_values: list[str]) -> dict[str, dict]:
     """Load one species model per species."""
     payloads = {}
 
     for species in species_values:
-        path = species_model_path(species, model_name)
+        path = species_model_path(species)
         payload = load_model_payload(path)
         payloads[species] = payload
 
-        payload_model_name = payload.get("model_name", "unknown")
-        print(f"Loaded {species} model: {payload_model_name}")
+        model_name = payload.get("model_name", "unknown")
+        print(f"Loaded {species} model: {model_name}")
 
     return payloads
 
@@ -89,19 +81,19 @@ def load_observed_fishing(year: int) -> pd.DataFrame:
     return df[["h3", "date", FISHING_TARGET]].copy()
 
 
-def output_dir(model_name: str, year: int) -> Path:
+def output_dir(year: int) -> Path:
     """Return yearly prediction output directory."""
-    return PREDICTION_ROOT / model_name / f"year={year}"
+    return PREDICTION_ROOT / f"year={year}"
 
 
-def merged_output_path(model_name: str, year: int) -> Path:
+def merged_output_path(year: int) -> Path:
     """Return merged yearly prediction output path."""
-    return output_dir(model_name, year) / "part.parquet"
+    return output_dir(year) / "part.parquet"
 
 
-def clean_output_dir(model_name: str, year: int) -> None:
+def clean_output_dir(year: int) -> None:
     """Remove existing prediction files for one year."""
-    out_dir = output_dir(model_name, year)
+    out_dir = output_dir(year)
 
     if not out_dir.exists():
         return
@@ -109,7 +101,7 @@ def clean_output_dir(model_name: str, year: int) -> None:
     for path in out_dir.glob("part-*.parquet"):
         path.unlink()
 
-    merged = merged_output_path(model_name, year)
+    merged = merged_output_path(year)
     if merged.exists():
         merged.unlink()
 
@@ -132,21 +124,6 @@ def validate_model_features(species_payload) -> None:
         )
 
 
-# def predict_species(
-#     batch: pd.DataFrame,
-#     species_payload,
-# ) -> np.ndarray:
-#     """Predict species use in model target space."""
-#     validate_model_features(species_payload)
-
-#     model = species_payload["model"]
-
-#     pred = model.predict(batch[FEATURES])
-#     pred = np.maximum(pred, 0.0)
-
-#     return pred.astype("float32")
-
-
 def predict_species(
     batch: pd.DataFrame,
     species_payload,
@@ -156,20 +133,15 @@ def predict_species(
 
     model = species_payload["model"]
 
-    x = batch[FEATURES].replace([np.inf, -np.inf], np.nan)
-
-    if x.isna().any().any():
-        x = x.fillna(x.median(numeric_only=True))
-
-    pred = model.predict(x)
+    pred = model.predict(batch[FEATURES])
     pred = np.maximum(pred, 0.0)
 
     return pred.astype("float32")
 
 
-def merge_year_parts(model_name: str, year: int) -> Path:
+def merge_year_parts(year: int) -> Path:
     """Merge yearly prediction chunks into one partition."""
-    out_dir = output_dir(model_name, year)
+    out_dir = output_dir(year)
     parts = sorted(out_dir.glob("part-*.parquet"))
 
     if not parts:
@@ -178,7 +150,7 @@ def merge_year_parts(model_name: str, year: int) -> Path:
     frames = [pd.read_parquet(path) for path in parts]
     df = pd.concat(frames, ignore_index=True)
 
-    out_file = merged_output_path(model_name, year)
+    out_file = merged_output_path(year)
     df.to_parquet(out_file, index=False, compression="zstd")
 
     for path in parts:
@@ -204,7 +176,6 @@ def build_species_predictions(
 
 
 def predict_year(
-    model_name: str,
     year: int,
     static: pd.DataFrame,
     species_payloads: dict[str, dict],
@@ -232,8 +203,8 @@ def predict_year(
         .astype("float32")
     )
 
-    clean_output_dir(model_name, year)
-    out_dir = output_dir(model_name, year)
+    clean_output_dir(year)
+    out_dir = output_dir(year)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for i, batch in enumerate(iter_batches(base, BATCH_ROWS)):
@@ -281,34 +252,19 @@ def predict_year(
         print(f"Saved: {out_file}")
         print(f"Rows: {len(out)}")
 
-    merged = merge_year_parts(model_name, year)
+    merged = merge_year_parts(year)
     print(f"Merged: {merged}")
-
-
-def selected_model_names() -> list[str]:
-    """Return model names selected for prediction."""
-    if PRIMARY_MODEL_NAME is None:
-        return list(MODEL_NAMES)
-
-    return [PRIMARY_MODEL_NAME]
 
 
 def predict_models() -> None:
     """Generate full-grid historical risk predictions."""
     static = load_static()
     species_values = species_list()
+    species_payloads = load_species_payloads(species_values)
 
-    for model_name in selected_model_names():
-        print(f"Predicting with model: {model_name}")
-        species_payloads = load_species_payloads(
-            species_values,
-            model_name,
+    for year in available_years("environmental"):
+        predict_year(
+            year=year,
+            static=static,
+            species_payloads=species_payloads,
         )
-
-        for year in available_years("environmental"):
-            predict_year(
-                model_name=model_name,
-                year=year,
-                static=static,
-                species_payloads=species_payloads,
-            )

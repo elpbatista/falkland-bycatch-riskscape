@@ -7,15 +7,13 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.ensemble import (
     ExtraTreesRegressor,
     HistGradientBoostingRegressor,
     RandomForestRegressor,
 )
-from sklearn.mixture import GaussianMixture
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder
 
 from riskscape.config import paths
 from riskscape.model.dataset import FEATURES, SPECIES_TARGET
@@ -24,144 +22,18 @@ from riskscape.model.dataset import FEATURES, SPECIES_TARGET
 RANDOM_STATE = 42
 
 MODEL_NAMES = [
-    # "hist_gradient_boosting",
-    # "random_forest",
-    # "extra_trees",
-    "gmm",
-    "bayesian_gmm",
+    "hist_gradient_boosting",
+    "random_forest",
+    "extra_trees",
 ]
+
+PRIMARY_MODEL_NAME = "extra_trees"
 
 MAX_ZERO_ROWS = 250_000
 MAX_POSITIVE_ROWS = None
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
-
-GMM_COMPONENTS = 6
-GMM_REG_COVAR = 1e-6
-
-
-HIST_GRADIENT_BOOSTING_PARAMS = {
-    "max_iter": 300,
-    "learning_rate": 0.05,
-    "max_leaf_nodes": 31,
-    "l2_regularization": 0.1,
-}
-
-BAYESIAN_PRIOR_PARAMS = {
-    "max_iter": 150,
-    "max_leaf_nodes": 15,
-}
-
-
-def build_hist_gradient_boosting(
-    random_state: int = RANDOM_STATE,
-    **overrides,
-) -> HistGradientBoostingRegressor:
-    """Build a histogram gradient boosting regressor."""
-    params = {**HIST_GRADIENT_BOOSTING_PARAMS, **overrides}
-
-    return HistGradientBoostingRegressor(
-        **params,
-        random_state=random_state,
-    )
-
-
-class GMMUseRegressor(BaseEstimator, RegressorMixin):
-    """Estimate use from environmental likelihood."""
-
-    def __init__(
-        self,
-        n_components: int = GMM_COMPONENTS,
-        random_state: int = RANDOM_STATE,
-        reg_covar: float = GMM_REG_COVAR,
-    ) -> None:
-        self.n_components = n_components
-        self.random_state = random_state
-        self.reg_covar = reg_covar
-        self.scaler = StandardScaler()
-        self.gmm = GaussianMixture(
-            n_components=n_components,
-            covariance_type="full",
-            reg_covar=reg_covar,
-            random_state=random_state,
-        )
-        self.min_log_density = 0.0
-        self.max_log_density = 1.0
-        self.max_target = 1.0
-
-    def fit(self, x, y, sample_weight=None):
-        """Fit density model on positive-use rows."""
-        y_values = np.asarray(y)
-        positive = y_values > 0
-
-        if positive.sum() < self.n_components:
-            raise ValueError("Not enough positive rows to fit GMM")
-
-        x_positive = np.asarray(x)[positive]
-        y_positive = y_values[positive]
-
-        x_scaled = self.scaler.fit_transform(x_positive)
-        self.gmm.fit(x_scaled)
-
-        log_density = self.gmm.score_samples(x_scaled)
-        self.min_log_density = float(np.quantile(log_density, 0.01))
-        self.max_log_density = float(np.quantile(log_density, 0.99))
-        self.max_target = float(np.quantile(y_positive, 0.99))
-
-        if self.max_log_density <= self.min_log_density:
-            self.max_log_density = self.min_log_density + 1.0
-
-        return self
-
-    def predict(self, x):
-        """Predict log-space use from likelihood."""
-        x_scaled = self.scaler.transform(x)
-        log_density = self.gmm.score_samples(x_scaled)
-
-        score = (
-            (log_density - self.min_log_density)
-            / (self.max_log_density - self.min_log_density)
-        )
-        score = np.clip(score, 0.0, 1.0)
-
-        return score * self.max_target
-
-
-class BayesianGMMUseRegressor(GMMUseRegressor):
-    """Estimate use from likelihood and a seasonal prior."""
-
-    def __init__(
-        self,
-        n_components: int = GMM_COMPONENTS,
-        random_state: int = RANDOM_STATE,
-        reg_covar: float = GMM_REG_COVAR,
-    ) -> None:
-        super().__init__(
-            n_components=n_components,
-            random_state=random_state,
-            reg_covar=reg_covar,
-        )
-        self.prior_model = build_hist_gradient_boosting(
-            random_state=random_state,
-            **BAYESIAN_PRIOR_PARAMS,
-        )
-
-    def fit(self, x, y, sample_weight=None):
-        """Fit likelihood and prior models."""
-        super().fit(x, y, sample_weight=sample_weight)
-        self.prior_model.fit(x, y, sample_weight=sample_weight)
-        return self
-
-    def predict(self, x):
-        """Predict log-space use from likelihood and prior."""
-        likelihood = super().predict(x)
-        prior = self.prior_model.predict(x)
-        prior = np.maximum(prior, 0.0)
-
-        combined = 0.5 * likelihood + 0.5 * prior
-
-        return combined
 
 
 def load_table(name: str) -> pd.DataFrame:
@@ -255,56 +127,36 @@ def sample_training_rows(df: pd.DataFrame) -> pd.DataFrame:
 
     return out.sample(frac=1.0, random_state=RANDOM_STATE).reset_index(drop=True)
 
-
-def build_random_forest() -> RandomForestRegressor:
-    """Build random forest regressor."""
-    return RandomForestRegressor(
-        n_estimators=300,
-        max_depth=20,
-        min_samples_leaf=5,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-    )
-
-
-def build_extra_trees() -> ExtraTreesRegressor:
-    """Build extra trees regressor."""
-    return ExtraTreesRegressor(
-        n_estimators=300,
-        max_depth=20,
-        min_samples_leaf=5,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-    )
-
-
-def build_gmm() -> GMMUseRegressor:
-    """Build GMM use regressor."""
-    return GMMUseRegressor()
-
-
-def build_bayesian_gmm() -> BayesianGMMUseRegressor:
-    """Build Bayesian GMM use regressor."""
-    return BayesianGMMUseRegressor()
-
-
-MODEL_BUILDERS = {
-    "hist_gradient_boosting": build_hist_gradient_boosting,
-    "random_forest": build_random_forest,
-    "extra_trees": build_extra_trees,
-    "gmm": build_gmm,
-    "bayesian_gmm": build_bayesian_gmm,
-}
-
-
 def build_model(model_name: str):
     """Build model by name."""
-    try:
-        builder = MODEL_BUILDERS[model_name]
-    except KeyError as exc:
-        raise ValueError(f"Unknown model: {model_name}") from exc
+    if model_name == "random_forest":
+        return RandomForestRegressor(
+            n_estimators=300,
+            max_depth=20,
+            min_samples_leaf=5,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        )
 
-    return builder()
+    if model_name == "extra_trees":
+        return ExtraTreesRegressor(
+            n_estimators=300,
+            max_depth=20,
+            min_samples_leaf=5,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        )
+
+    if model_name == "hist_gradient_boosting":
+        return HistGradientBoostingRegressor(
+            max_iter=300,
+            learning_rate=0.05,
+            max_leaf_nodes=31,
+            l2_regularization=0.1,
+            random_state=RANDOM_STATE,
+        )
+
+    raise ValueError(f"Unknown model: {model_name}")
 
 
 def sample_weights(y_train: pd.Series) -> np.ndarray:
@@ -312,7 +164,7 @@ def sample_weights(y_train: pd.Series) -> np.ndarray:
     raw_target = np.expm1(y_train)
     # weights = 1.0 + raw_target
     # weights = 1.0 + 2.0 * raw_target
-    weights = 1.0 + raw_target ** 0.75
+    weights = 1 + raw_target ** 0.75
 
     return weights.to_numpy(dtype="float32")
 
@@ -381,10 +233,9 @@ def train_joint_species_model(
         "model_type": "joint_species",
     }
 
-    model_dir = MODEL_DIR / model_name
     save_payload(
         payload,
-        model_dir / "species_model_joint.joblib",
+        MODEL_DIR / f"species_model_joint_{model_name}.joblib",
     )
 
     print("Joint species model:", model_name)
@@ -441,10 +292,9 @@ def train_single_species_model(
         "model_type": "single_species",
     }
 
-    model_dir = MODEL_DIR / model_name
     save_payload(
         payload,
-        model_dir / f"species_model_{safe_name}.joblib",
+        MODEL_DIR / f"species_model_{safe_name}_{model_name}.joblib",
     )
 
     print(f"{species_name} species model:", model_name)
