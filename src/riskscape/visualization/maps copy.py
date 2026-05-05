@@ -36,7 +36,7 @@ class MapStyle:
     show_reference_map: bool = True
     hide_zero_values: bool = True
     color_quantile: float | None = 0.99
-    alpha: float = 0.99
+    alpha: float = 0.95
     alpha_min: float = 0.0
     alpha_gamma: float = 0.75
     alpha_scale: bool = True
@@ -114,6 +114,30 @@ def summarize_h3(
     )
 
     return grouped
+
+
+def add_risk_class(
+    gdf: gpd.GeoDataFrame,
+    value_col: str,
+) -> gpd.GeoDataFrame:
+    """Add percentile risk class for nonzero values."""
+    out = gdf.copy()
+    values = out[value_col].dropna()
+
+    if values.empty:
+        raise ValueError(f"No values found for {value_col}")
+
+    q90 = values.quantile(0.90)
+    q95 = values.quantile(0.95)
+    q99 = values.quantile(0.99)
+
+    out["risk_class"] = "none"
+    out.loc[out[value_col] > 0, "risk_class"] = "low"
+    out.loc[out[value_col] >= q90, "risk_class"] = "high"
+    out.loc[out[value_col] >= q95, "risk_class"] = "very_high"
+    out.loc[out[value_col] >= q99, "risk_class"] = "extreme"
+
+    return out
 
 
 def format_coordinate_axes(ax) -> None:
@@ -264,125 +288,6 @@ def color_norm(
     return colors.Normalize(vmin=vmin, vmax=vmax)
 
 
-def plottable_values(
-    gdf: gpd.GeoDataFrame,
-    value_col: str,
-    style: MapStyle,
-) -> gpd.GeoDataFrame:
-    """Return rows that should be drawn on the map."""
-    plot_gdf = gdf.dropna(subset=[value_col]).copy()
-
-    if style.hide_zero_values:
-        plot_gdf = plot_gdf[plot_gdf[value_col] > 0].copy()
-
-    if plot_gdf.empty:
-        raise ValueError(f"No plottable values found for {value_col}")
-
-    return plot_gdf
-
-
-def map_facecolors(
-    values: pd.Series,
-    norm: colors.Normalize,
-    style: MapStyle,
-) -> np.ndarray:
-    """Return RGBA face colors for the H3 polygons."""
-    cmap = plt.get_cmap(style.cmap)
-    facecolors = cmap(norm(values.clip(upper=norm.vmax)))
-
-    if style.alpha_scale:
-        scaled_values = pd.Series(norm(values), index=values.index)
-        facecolors[:, -1] = scaled_alpha(scaled_values, 0.0, 1.0, style)
-    else:
-        facecolors[:, -1] = style.alpha
-
-    return facecolors
-
-
-def draw_prediction_layer(
-    ax,
-    gdf: gpd.GeoDataFrame,
-    value_col: str,
-    norm: colors.Normalize,
-    style: MapStyle,
-) -> None:
-    """Draw the prediction polygons."""
-    gdf.plot(
-        ax=ax,
-        color=map_facecolors(gdf[value_col], norm, style),
-        edgecolor="none",
-        linewidth=0,
-    )
-
-
-def draw_prediction_colorbar(
-    fig,
-    ax,
-    value_col: str,
-    norm: colors.Normalize,
-    style: MapStyle,
-) -> None:
-    """Draw a compact low/high colorbar."""
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
-        ax=ax,
-        label=legend_label(value_col),
-        ticks=[],
-        shrink=0.72,
-        pad=0.02,
-        fraction=0.035,
-    )
-    cbar.outline.set_visible(False)
-    cbar.ax.tick_params(which="both", length=0)
-    cbar.ax.minorticks_off()
-    if cbar.solids is not None:
-        cbar.solids.set_edgecolor("face")
-
-    label_colorbar_extremes(fig)
-
-
-def draw_map_context(
-    ax,
-    bbox_gdf: gpd.GeoDataFrame,
-    land: gpd.GeoDataFrame,
-    coast: gpd.GeoDataFrame,
-    style: MapStyle,
-) -> None:
-    """Draw overlays and map decorations."""
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-
-    if style.show_north_arrow:
-        draw_north_arrow(ax)
-
-    if style.show_reference_map:
-        draw_reference_inset(ax, land, bbox_gdf)
-
-
-def format_map_axes(ax, title: str, style: MapStyle) -> None:
-    """Apply title and coordinate styling."""
-    ax.set_title(title)
-
-    if style.show_coordinates:
-        format_coordinate_axes(ax)
-    else:
-        ax.set_axis_off()
-
-
-def prediction_labels(
-    species: str | None,
-    month: int | None,
-    model_name: str | None,
-    product_name: str | None,
-) -> tuple[str, str, str, str]:
-    """Return display-safe labels for prediction metadata."""
-    return (
-        species if species is not None else "all_species",
-        f"month_{month:02d}" if month is not None else "all_months",
-        model_name if model_name is not None else "default_model",
-        product_name if product_name is not None else "default_product",
-    )
-
-
 def plot_h3_map(
     gdf: gpd.GeoDataFrame,
     value_col: str,
@@ -403,13 +308,67 @@ def plot_h3_map(
             log_scale=style.bathymetry_log_scale,
         )
 
-    plot_gdf = plottable_values(gdf, value_col, style)
-    norm = color_norm(plot_gdf[value_col].dropna(), style)
+    plot_gdf = gdf.dropna(subset=[value_col]).copy()
 
-    draw_prediction_layer(ax, plot_gdf, value_col, norm, style)
-    draw_prediction_colorbar(fig, ax, value_col, norm, style)
-    draw_map_context(ax, bbox_gdf, land, coast, style)
-    format_map_axes(ax, title, style)
+    if style.hide_zero_values:
+        plot_gdf = plot_gdf[plot_gdf[value_col] > 0].copy()
+
+    if plot_gdf.empty:
+        raise ValueError(f"No plottable values found for {value_col}")
+
+    plot_values = plot_gdf[value_col].dropna()
+    norm = color_norm(plot_values, style)
+    cmap = plt.get_cmap(style.cmap)
+    facecolors = cmap(norm(plot_gdf[value_col].clip(upper=norm.vmax)))
+    if style.alpha_scale:
+        facecolors[:, -1] = scaled_alpha(
+            pd.Series(norm(plot_gdf[value_col]), index=plot_gdf.index),
+            0.0,
+            1.0,
+            style,
+        )
+    else:
+        facecolors[:, -1] = style.alpha
+
+    plot_gdf.plot(
+        ax=ax,
+        color=facecolors,
+        edgecolor="none",
+        linewidth=0,
+        missing_kwds={
+            "color": "white",
+            "alpha": 0.0,
+        },
+    )
+    cbar = fig.colorbar(
+        ScalarMappable(norm=norm, cmap=cmap),
+        ax=ax,
+        label=legend_label(value_col),
+        ticks=[],
+        shrink=0.72,
+        pad=0.02,
+        fraction=0.035,
+    )
+    cbar.outline.set_visible(False)
+    cbar.ax.tick_params(which="both", length=0)
+    cbar.ax.minorticks_off()
+    if cbar.solids is not None:
+        cbar.solids.set_edgecolor("face")
+    label_colorbar_extremes(fig)
+
+    draw_reference_layers(ax, bbox_gdf, land, coast)
+
+    if style.show_north_arrow:
+        draw_north_arrow(ax)
+
+    if style.show_reference_map:
+        draw_reference_inset(ax, land, bbox_gdf)
+
+    ax.set_title(title)
+    if style.show_coordinates:
+        format_coordinate_axes(ax)
+    else:
+        ax.set_axis_off()
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=300, bbox_inches="tight")
@@ -448,12 +407,10 @@ def plot_prediction_map(
 
     gdf = grid.merge(summary, on="h3", how="left")
 
-    species_label, month_label, model_label, product_label = prediction_labels(
-        species=species,
-        month=month,
-        model_name=model_name,
-        product_name=product_name,
-    )
+    species_label = species if species is not None else "all_species"
+    month_label = f"month_{month:02d}" if month is not None else "all_months"
+    model_label = model_name if model_name is not None else "default_model"
+    product_label = product_name if product_name is not None else "default_product"
 
     title = (
         f"{value_col} ({agg}) - {species_label} - "

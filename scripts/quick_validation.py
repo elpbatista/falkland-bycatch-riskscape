@@ -24,8 +24,9 @@ from riskscape.config import paths
 # df = pd.read_parquet(
 #     "data/modeling/species_training/year=2022/part.parquet"
 # )
-path = paths["data"] / "modeling" / "predictions" / "year=2022/part.parquet"
+path = paths["data"] / "modeling" / "predictions" / "extra_trees" / "bbal" / "year=2022" / "part.parquet"
 df = pd.read_parquet(path)
+
 
 # print(df["residence_index"].describe())
 # print(df["residence_index"].nunique())
@@ -51,14 +52,16 @@ df = pd.read_parquet(path)
 
 # print(np.percentile(df["risk_log_pred"], [90, 95, 99, 99.9]))
 
-print("\nTop percentiles:")
-nonzero = df[df["risk_log_pred"] > 0]
-print(nonzero["risk_log_pred"].quantile([0.5, 0.75, 0.9, 0.95, 0.99]))
+# print("\nTop percentiles:")
+# nonzero = df[df["risk_log_pred"] > 0]
+# print(nonzero["risk_log_pred"].quantile([0.5, 0.75, 0.9, 0.95, 0.99]))
 
 # print(np.percentile(df["risk_log_pred"], [50, 75, 90, 95, 99, 99.5, 99.9]))
 
-print(
-    df[df["species_use_log_pred"] > 0]
-    .groupby("species")["species_use_log_pred"]
-    .describe()
-)
+# print(
+#     df[df["species_use_log_pred"] > 0]
+#     .groupby("species")["species_use_log_pred"]
+#     .describe()
+# )
+
+print(df.columns.tolist())
