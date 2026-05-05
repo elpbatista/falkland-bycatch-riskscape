@@ -3,6 +3,7 @@ import pandas as pd
 from riskscape.model.dataset import SPECIES_TARGET
 
 import numpy as np
+import pyarrow.parquet as pq
 
 from riskscape.config import paths
 
@@ -24,7 +25,8 @@ from riskscape.config import paths
 # df = pd.read_parquet(
 #     "data/modeling/species_training/year=2022/part.parquet"
 # )
-path = paths["data"] / "modeling" / "predictions" / "extra_trees" / "bbal" / "year=2022" / "part.parquet"
+path = paths["data"] / "modeling" / "fishing_training" / "year=2022" / "part.parquet"
+# path = paths["data"] / "features" / "environmental" / "year=2022" / "part.parquet"
 df = pd.read_parquet(path)
 
 
@@ -65,3 +67,10 @@ df = pd.read_parquet(path)
 # )
 
 print(df.columns.tolist())
+
+# print(df.head())
+
+# print(pq.read_schema(path).field("date").type)
+# print(df["date"].dtype)
+# print(type(df["date"].iloc[0]))
+# print(df["date"].head())

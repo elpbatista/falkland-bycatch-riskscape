@@ -6,17 +6,19 @@ import math
 from pathlib import Path
 
 import geopandas as gpd
+import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from shapely.geometry import box
-import numpy as np
 
 from riskscape.config import cfg, paths
 from riskscape.grid import load_grid
 
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+STUDY_AREA_COLOR = "#d62728"
+STUDY_AREA_LINEWIDTH = 1.0
 
 
 def load_reference_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -118,4 +120,118 @@ def draw_reference_layers(
     """Draw reference layers on top."""
     coast.plot(ax=ax, color="darkgrey", linewidth=0.5)
     land.plot(ax=ax, color="grey", edgecolor="none")
-    bbox_gdf.boundary.plot(ax=ax, edgecolor="red", linewidth=1)
+    draw_study_area_boundary(ax, bbox_gdf)
+
+
+def draw_study_area_boundary(
+    ax,
+    bbox_gdf: gpd.GeoDataFrame,
+    linewidth: float = STUDY_AREA_LINEWIDTH,
+) -> None:
+    """Draw the configured study-area boundary."""
+    bbox_gdf.boundary.plot(
+        ax=ax,
+        edgecolor=STUDY_AREA_COLOR,
+        linewidth=linewidth,
+    )
+
+
+def format_coordinate_axes(ax) -> None:
+    """Show longitude and latitude axes on map figures."""
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.tick_params(labelsize=9)
+    ax.grid(
+        True,
+        color="white",
+        linewidth=0.6,
+        alpha=0.45,
+    )
+
+
+def draw_north_arrow(ax) -> None:
+    """Draw a simple north arrow in axes coordinates."""
+    ax.annotate(
+        "N",
+        xy=(0.92, 0.93),
+        xytext=(0.92, 0.83),
+        xycoords="axes fraction",
+        textcoords="axes fraction",
+        ha="center",
+        va="center",
+        color="#f6f6f6",
+        fontsize=10,
+        fontweight="bold",
+        arrowprops={
+            "arrowstyle": "-|>",
+            "color": "#f6f6f6",
+            "linewidth": 0.9,
+            "mutation_scale": 10,
+            "path_effects": [
+                path_effects.withStroke(linewidth=1.2, foreground="#666666")
+            ],
+        },
+        zorder=10,
+        path_effects=[
+            path_effects.withStroke(linewidth=1.2, foreground="#666666")
+        ],
+    )
+
+
+def draw_reference_inset(
+    ax,
+    land: gpd.GeoDataFrame,
+    bbox_gdf: gpd.GeoDataFrame,
+) -> None:
+    """Draw a small global reference map with the region bbox."""
+    inset_ax = ax.inset_axes([0.73, 0.025, 0.22, 0.18])
+    inset_ax.set_facecolor((1, 1, 1, 0.72))
+
+    land.plot(
+        ax=inset_ax,
+        color="#b8b8b8",
+        edgecolor="none",
+        linewidth=0,
+    )
+    draw_study_area_boundary(inset_ax, bbox_gdf, linewidth=1.2)
+
+    inset_ax.set_xlim(-180, 180)
+    inset_ax.set_ylim(-90, 90)
+    inset_ax.set_xticks([])
+    inset_ax.set_yticks([])
+
+    for spine in inset_ax.spines.values():
+        spine.set_edgecolor("#9a9a9a")
+        spine.set_linewidth(0.6)
+
+
+def draw_map_context(
+    ax,
+    bbox_gdf: gpd.GeoDataFrame,
+    land: gpd.GeoDataFrame,
+    coast: gpd.GeoDataFrame,
+    show_north_arrow: bool = True,
+    show_reference_map: bool = True,
+) -> None:
+    """Draw reference overlays and optional map decorations."""
+    draw_reference_layers(ax, bbox_gdf, land, coast)
+
+    if show_north_arrow:
+        draw_north_arrow(ax)
+
+    if show_reference_map:
+        draw_reference_inset(ax, land, bbox_gdf)
+
+
+def format_map_axes(
+    ax,
+    title: str,
+    show_coordinates: bool = True,
+) -> None:
+    """Apply title and coordinate styling."""
+    ax.set_title(title)
+
+    if show_coordinates:
+        format_coordinate_axes(ax)
+    else:
+        ax.set_axis_off()

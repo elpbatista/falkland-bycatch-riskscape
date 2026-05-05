@@ -8,7 +8,6 @@ from pathlib import Path
 import geopandas as gpd
 from matplotlib import colors
 from matplotlib.cm import ScalarMappable
-import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -17,7 +16,8 @@ from riskscape.config import paths
 from riskscape.grid import load_grid
 from riskscape.visualization.base_map import (
     draw_bathymetry_base_layer,
-    draw_reference_layers,
+    draw_map_context,
+    format_map_axes,
     load_reference_layers,
     setup_map,
 )
@@ -116,19 +116,6 @@ def summarize_h3(
     return grouped
 
 
-def format_coordinate_axes(ax) -> None:
-    """Show longitude and latitude axes on map figures."""
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.tick_params(labelsize=9)
-    ax.grid(
-        True,
-        color="white",
-        linewidth=0.6,
-        alpha=0.45,
-    )
-
-
 def legend_label(value_col: str) -> str:
     """Return a readable legend label for a plotted value column."""
     label = value_col.removesuffix("_mean")
@@ -162,66 +149,6 @@ def label_colorbar_extremes(fig, low: str = "Low", high: str = "High") -> None:
         va="bottom",
         fontsize=9,
     )
-
-
-def draw_north_arrow(ax) -> None:
-    """Draw a simple north arrow in axes coordinates."""
-    ax.annotate(
-        "N",
-        xy=(0.92, 0.93),
-        xytext=(0.92, 0.83),
-        xycoords="axes fraction",
-        textcoords="axes fraction",
-        ha="center",
-        va="center",
-        color="#f6f6f6",
-        fontsize=10,
-        fontweight="bold",
-        arrowprops={
-            "arrowstyle": "-|>",
-            "color": "#f6f6f6",
-            "linewidth": 0.9,
-            "mutation_scale": 10,
-            "path_effects": [
-                path_effects.withStroke(linewidth=1.2, foreground="#666666")
-            ],
-        },
-        zorder=10,
-        path_effects=[
-            path_effects.withStroke(linewidth=1.2, foreground="#666666")
-        ],
-    )
-
-
-def draw_reference_inset(
-    ax,
-    land: gpd.GeoDataFrame,
-    bbox_gdf: gpd.GeoDataFrame,
-) -> None:
-    """Draw a small global reference map with the region bbox."""
-    inset_ax = ax.inset_axes([0.73, 0.025, 0.22, 0.18])
-    inset_ax.set_facecolor((1, 1, 1, 0.72))
-
-    land.plot(
-        ax=inset_ax,
-        color="#b8b8b8",
-        edgecolor="none",
-        linewidth=0,
-    )
-    bbox_gdf.boundary.plot(
-        ax=inset_ax,
-        edgecolor="#d62728",
-        linewidth=1.2,
-    )
-
-    inset_ax.set_xlim(-180, 180)
-    inset_ax.set_ylim(-90, 90)
-    inset_ax.set_xticks([])
-    inset_ax.set_yticks([])
-
-    for spine in inset_ax.spines.values():
-        spine.set_edgecolor("#9a9a9a")
-        spine.set_linewidth(0.6)
 
 
 def scaled_alpha(
@@ -341,33 +268,6 @@ def draw_prediction_colorbar(
     label_colorbar_extremes(fig)
 
 
-def draw_map_context(
-    ax,
-    bbox_gdf: gpd.GeoDataFrame,
-    land: gpd.GeoDataFrame,
-    coast: gpd.GeoDataFrame,
-    style: MapStyle,
-) -> None:
-    """Draw overlays and map decorations."""
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-
-    if style.show_north_arrow:
-        draw_north_arrow(ax)
-
-    if style.show_reference_map:
-        draw_reference_inset(ax, land, bbox_gdf)
-
-
-def format_map_axes(ax, title: str, style: MapStyle) -> None:
-    """Apply title and coordinate styling."""
-    ax.set_title(title)
-
-    if style.show_coordinates:
-        format_coordinate_axes(ax)
-    else:
-        ax.set_axis_off()
-
-
 def prediction_labels(
     species: str | None,
     month: int | None,
@@ -408,8 +308,19 @@ def plot_h3_map(
 
     draw_prediction_layer(ax, plot_gdf, value_col, norm, style)
     draw_prediction_colorbar(fig, ax, value_col, norm, style)
-    draw_map_context(ax, bbox_gdf, land, coast, style)
-    format_map_axes(ax, title, style)
+    draw_map_context(
+        ax,
+        bbox_gdf,
+        land,
+        coast,
+        show_north_arrow=style.show_north_arrow,
+        show_reference_map=style.show_reference_map,
+    )
+    format_map_axes(
+        ax,
+        title,
+        show_coordinates=style.show_coordinates,
+    )
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=300, bbox_inches="tight")
