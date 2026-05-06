@@ -37,7 +37,7 @@ def plot_study_area_map() -> None:
 
     draw_bathymetry_base_layer(
         ax,
-        legend=False,
+        legend=True,
         draw_grid=True,
     )
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 from pathlib import Path
 
@@ -20,87 +19,26 @@ from riskscape.grid import load_grid
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-MAP_CRS = "EPSG:4326"
-OCEAN_COLOR = "#e5fbfa"
-LAND_COLOR = "grey"
-COAST_COLOR = "darkgrey"
-GRID_COLOR = "darkgrey"
-INSET_LAND_COLOR = "#b8b8b8"
-INSET_FACE_COLOR = (1, 1, 1, 0.72)
 STUDY_AREA_COLOR = "#d62728"
 STUDY_AREA_LINEWIDTH = 1.0
-COLORBAR_KWARGS = {
-    "ticks": [],
-    "shrink": 0.72,
-    "pad": 0.02,
-    "fraction": 0.035,
-}
-
-
-@dataclass(frozen=True)
-class MapBounds:
-    """Configured map extent."""
-
-    xmin: float
-    ymin: float
-    xmax: float
-    ymax: float
-
-    @classmethod
-    def from_config(cls) -> MapBounds:
-        """Build bounds from project config."""
-        bbox = cfg["region"]["bbox"]
-        return cls(
-            xmin=bbox["xmin"],
-            ymin=bbox["ymin"],
-            xmax=bbox["xmax"],
-            ymax=bbox["ymax"],
-        )
-
-    @property
-    def mid_latitude(self) -> float:
-        """Return the vertical midpoint latitude."""
-        return (self.ymin + self.ymax) / 2
-
-    @property
-    def latitude_scale(self) -> float:
-        """Return longitude-to-latitude margin scale for this extent."""
-        return math.cos(math.radians(self.mid_latitude))
-
-    def geometry(self):
-        """Return the bounding geometry."""
-        return box(self.xmin, self.ymin, self.xmax, self.ymax)
-
-    def apply_to_axis(self, ax, margin: float = 0.5) -> None:
-        """Apply the map extent to an axis."""
-        ax.set_xlim(self.xmin - margin, self.xmax + margin)
-        ax.set_ylim(
-            self.ymin - margin * self.latitude_scale,
-            self.ymax + margin * self.latitude_scale,
-        )
-
-
-def project_reference_path(key: str) -> Path:
-    """Return an absolute reference-layer path from config."""
-    return PROJECT_ROOT / cfg["references"][key]
 
 
 def load_reference_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Load land and coastline layers."""
-    land = gpd.read_file(project_reference_path("land"))
-    coast = gpd.read_file(project_reference_path("coastline"))
+    land = gpd.read_file(PROJECT_ROOT / cfg["references"]["land"])
+    coast = gpd.read_file(PROJECT_ROOT / cfg["references"]["coastline"])
 
     return land, coast
 
 
-def static_feature_path() -> Path:
-    """Return the static feature table path."""
-    return paths["data"] / "features" / "static" / "static.parquet"
-
-
 def load_static_features() -> pd.DataFrame:
     """Load static H3 features."""
-    static_path = static_feature_path()
+    static_path = (
+        paths["data"]
+        / "features"
+        / "static"
+        / "static.parquet"
+    )
 
     if not static_path.exists():
         raise FileNotFoundError(f"Static features not found: {static_path}")
@@ -110,12 +48,25 @@ def load_static_features() -> pd.DataFrame:
 
 def setup_map(figsize: tuple[int, int] = (10, 10)):
     """Create base map axis and bbox layer."""
-    bounds = MapBounds.from_config()
-    bbox_gdf = gpd.GeoDataFrame(geometry=[bounds.geometry()], crs=MAP_CRS)
+    bbox = cfg["region"]["bbox"]
+
+    xmin = bbox["xmin"]
+    ymin = bbox["ymin"]
+    xmax = bbox["xmax"]
+    ymax = bbox["ymax"]
+
+    bbox_poly = box(xmin, ymin, xmax, ymax)
+    bbox_gdf = gpd.GeoDataFrame(geometry=[bbox_poly], crs="EPSG:4326")
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax)
+    ax.set_facecolor("#e5fbfa")
+
+    mid_lat = (ymin + ymax) / 2
+    scale = math.cos(math.radians(mid_lat))
+    margin = 0.5
+
+    ax.set_xlim(xmin - margin, xmax + margin)
+    ax.set_ylim(ymin - margin * scale, ymax + margin * scale)
 
     return fig, ax, bbox_gdf
 
@@ -165,7 +116,10 @@ def draw_compact_colorbar(
         ScalarMappable(norm=norm, cmap=plt.get_cmap(cmap)),
         ax=ax,
         label=label,
-        **COLORBAR_KWARGS,
+        ticks=[],
+        shrink=0.72,
+        pad=0.02,
+        fraction=0.035,
     )
     cbar.outline.set_visible(False)
     cbar.ax.tick_params(which="both", length=0)
@@ -198,68 +152,28 @@ def bathymetry_norm(
     return colors.Normalize(vmin=vmin, vmax=vmax)
 
 
-def prepare_bathymetry_values(
-    gdf: gpd.GeoDataFrame,
-    log_scale: bool,
-) -> tuple[gpd.GeoDataFrame, str]:
-    """Return bathymetry data and the column to plot."""
-    if not log_scale:
-        return gdf, "depth_m"
-
-    out = gdf.copy()
-    out["depth_log"] = np.log1p(out["depth_m"].clip(lower=0))
-    return out, "depth_log"
-
-
-def draw_h3_grid_outline(ax, grid: gpd.GeoDataFrame) -> None:
-    """Draw a light H3 grid outline."""
-    grid.plot(
-        ax=ax,
-        edgecolor=GRID_COLOR,
-        facecolor="none",
-        linewidth=0.1,
-    )
-
-
-def draw_bathymetry_legend(
-    ax,
-    cmap: str,
-    norm: colors.Normalize,
-    min_depth: float,
-    max_depth: float,
-) -> None:
-    """Draw the inverted bathymetry legend."""
-    draw_compact_colorbar(
-        ax,
-        cmap,
-        norm,
-        label="Depth",
-        bottom_label=format_depth_label(max_depth),
-        top_label=format_depth_label(min_depth),
-        invert=True,
-    )
-
-
 def draw_bathymetry_base_layer(
     ax,
     cmap: str = "Blues",
     legend: bool = True,
     vmax_quantile: float = 1,
-    draw_grid: bool = False,
+    draw_grid: bool = True,
     log_scale: bool = False,
 ) -> gpd.GeoDataFrame:
     """Draw H3 bathymetry as a base layer."""
     static = load_static_features()
     grid = load_grid(uint64=True)
-    plot_gdf, column = prepare_bathymetry_values(
-        grid.merge(static, on="h3", how="left"),
-        log_scale=log_scale,
-    )
+    plot_gdf = grid.merge(static, on="h3", how="left")
+
+    column = "depth_m"
+
+    if log_scale:
+        column = "depth_log"
+        depth = plot_gdf["depth_m"].clip(lower=0)
+        plot_gdf[column] = np.log1p(depth)
 
     values = plot_gdf[column].dropna()
     norm = bathymetry_norm(values, vmax_quantile)
-    depth_values = plot_gdf["depth_m"].dropna()
-    depth_norm = bathymetry_norm(depth_values, vmax_quantile)
 
     plot_gdf.dropna(subset=[column]).plot(
         ax=ax,
@@ -273,16 +187,23 @@ def draw_bathymetry_base_layer(
     )
 
     if legend:
-        draw_bathymetry_legend(
+        draw_compact_colorbar(
             ax,
             cmap,
             norm,
-            min_depth=depth_norm.vmin,
-            max_depth=depth_norm.vmax,
+            label="Depth",
+            bottom_label=format_depth_label(norm.vmax),
+            top_label=format_depth_label(norm.vmin),
+            invert=True,
         )
 
     if draw_grid:
-        draw_h3_grid_outline(ax, grid)
+        grid.plot(
+            ax=ax,
+            edgecolor="darkgrey",
+            facecolor="none",
+            linewidth=0.1,
+        )
 
     return plot_gdf
 
@@ -294,8 +215,8 @@ def draw_reference_layers(
     coast: gpd.GeoDataFrame,
 ) -> None:
     """Draw reference layers on top."""
-    coast.plot(ax=ax, color=COAST_COLOR, linewidth=0.5)
-    land.plot(ax=ax, color=LAND_COLOR, edgecolor="none")
+    coast.plot(ax=ax, color="darkgrey", linewidth=0.5)
+    land.plot(ax=ax, color="grey", edgecolor="none")
     draw_study_area_boundary(ax, bbox_gdf)
 
 
@@ -327,7 +248,6 @@ def format_coordinate_axes(ax) -> None:
 
 def draw_north_arrow(ax) -> None:
     """Draw a simple north arrow in axes coordinates."""
-    stroke = path_effects.withStroke(linewidth=1.2, foreground="#666666")
     ax.annotate(
         "N",
         xy=(0.92, 0.93),
@@ -344,10 +264,14 @@ def draw_north_arrow(ax) -> None:
             "color": "#f6f6f6",
             "linewidth": 0.9,
             "mutation_scale": 10,
-            "path_effects": [stroke],
+            "path_effects": [
+                path_effects.withStroke(linewidth=1.2, foreground="#666666")
+            ],
         },
         zorder=10,
-        path_effects=[stroke],
+        path_effects=[
+            path_effects.withStroke(linewidth=1.2, foreground="#666666")
+        ],
     )
 
 
@@ -358,11 +282,11 @@ def draw_reference_inset(
 ) -> None:
     """Draw a small global reference map with the region bbox."""
     inset_ax = ax.inset_axes([0.73, 0.025, 0.22, 0.18])
-    inset_ax.set_facecolor(INSET_FACE_COLOR)
+    inset_ax.set_facecolor((1, 1, 1, 0.72))
 
     land.plot(
         ax=inset_ax,
-        color=INSET_LAND_COLOR,
+        color="#b8b8b8",
         edgecolor="none",
         linewidth=0,
     )

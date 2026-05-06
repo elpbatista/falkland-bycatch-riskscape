@@ -7,7 +7,6 @@ from pathlib import Path
 
 import geopandas as gpd
 from matplotlib import colors
-from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -16,6 +15,7 @@ from riskscape.config import paths
 from riskscape.grid import load_grid
 from riskscape.visualization.base_map import (
     draw_bathymetry_base_layer,
+    draw_compact_colorbar,
     draw_map_context,
     format_map_axes,
     load_reference_layers,
@@ -125,32 +125,6 @@ def legend_label(value_col: str) -> str:
     return label.title()
 
 
-def label_colorbar_extremes(fig, low: str = "Low", high: str = "High") -> None:
-    """Label a GeoPandas colorbar with simple low/high endpoints."""
-    if len(fig.axes) < 2:
-        return
-
-    cax = fig.axes[-1]
-    cax.text(
-        0.5,
-        -0.03,
-        low,
-        transform=cax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=9,
-    )
-    cax.text(
-        0.5,
-        1.03,
-        high,
-        transform=cax.transAxes,
-        ha="center",
-        va="bottom",
-        fontsize=9,
-    )
-
-
 def scaled_alpha(
     values: pd.Series,
     vmin: float,
@@ -243,29 +217,18 @@ def draw_prediction_layer(
 
 
 def draw_prediction_colorbar(
-    fig,
     ax,
     value_col: str,
     norm: colors.Normalize,
     style: MapStyle,
 ) -> None:
     """Draw a compact low/high colorbar."""
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
+    draw_compact_colorbar(
         ax=ax,
+        cmap=style.cmap,
+        norm=norm,
         label=legend_label(value_col),
-        ticks=[],
-        shrink=0.72,
-        pad=0.02,
-        fraction=0.035,
     )
-    cbar.outline.set_visible(False)
-    cbar.ax.tick_params(which="both", length=0)
-    cbar.ax.minorticks_off()
-    if cbar.solids is not None:
-        cbar.solids.set_edgecolor("face")
-
-    label_colorbar_extremes(fig)
 
 
 def prediction_labels(
@@ -307,7 +270,7 @@ def plot_h3_map(
     norm = color_norm(plot_gdf[value_col].dropna(), style)
 
     draw_prediction_layer(ax, plot_gdf, value_col, norm, style)
-    draw_prediction_colorbar(fig, ax, value_col, norm, style)
+    draw_prediction_colorbar(ax, value_col, norm, style)
     draw_map_context(
         ax,
         bbox_gdf,
