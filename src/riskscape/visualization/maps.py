@@ -146,20 +146,16 @@ def summarize_hazard_h3(
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
-    fishing_effort_fraction: float = 0.25,
+    minimum_effort_unit: float = 0.25,
 ) -> pd.DataFrame:
-    """Summarize hazard as species use plus fractional median fishing activity by H3."""
+    """Summarize hazard as species use plus a fixed minimum effort unit by H3."""
     out = filter_prediction_rows(df, species=species, month=month)
 
     grouped = out.groupby("h3", as_index=False).agg(
         species_use_log_pred=("species_use_log_pred", agg),
-        fishing_activity_log=("fishing_activity_log", "median"),
-    )
-    fishing_fraction_median_log = np.log1p(
-        np.expm1(grouped["fishing_activity_log"]) * fishing_effort_fraction
     )
     grouped["hazard_log_pred"] = (
-        grouped["species_use_log_pred"] + fishing_fraction_median_log
+        grouped["species_use_log_pred"] + np.log1p(minimum_effort_unit)
     )
 
     return grouped[["h3", "hazard_log_pred"]]
@@ -561,13 +557,13 @@ def plot_hazard_map(
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
-    fishing_effort_fraction: float = 0.25,
+    minimum_effort_unit: float = 0.25,
     model_name: str | None = None,
     product_name: str | None = None,
     title: str | None = None,
     style: MapStyle | None = None,
 ) -> Path:
-    """Plot hazard as species use plus fractional median fishing activity."""
+    """Plot hazard as species use plus a fixed minimum effort unit."""
     df = load_predictions(
         year=year,
         model_name=model_name,
@@ -579,7 +575,7 @@ def plot_hazard_map(
         species=species,
         month=month,
         agg=agg,
-        fishing_effort_fraction=fishing_effort_fraction,
+        minimum_effort_unit=minimum_effort_unit,
     )
 
     grid = load_grid(uint64=True)
@@ -596,7 +592,7 @@ def plot_hazard_map(
         title
         or (
             f"Hazard ({agg} species use + "
-            f"{fishing_effort_fraction:g} median fishing)"
+            f"{minimum_effort_unit:g} effort unit)"
         ),
         year=year,
         species=species,

@@ -73,3 +73,5 @@ Bayesian mixture models were used to estimate the ecological
 plausibility of environmental feature combinations, providing
 a probabilistic measure of support for model predictions under
 observed and novel conditions.
+
+At H3 resolution 6, a minimum operational exposure unit of 0.5 vessel-hours per cell-day was used, corresponding approximately to one vessel operating within or traversing a grid cell for about 30 minutes at fishing speed.
