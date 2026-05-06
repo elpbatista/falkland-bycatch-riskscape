@@ -1,6 +1,6 @@
-"""Plot prediction maps."""
+"""Plot species prediction maps."""
 
-from riskscape.visualization.maps import MapStyle, plot_prediction_map
+from riskscape.visualization.maps import plot_prediction_map
 
 
 def main() -> int:
@@ -38,19 +38,6 @@ def main() -> int:
             species=species,
             agg="mean",
         )
-
-    plot_prediction_map(
-        year=year,
-        model_name=model_name,
-        product_name="bbal",
-        value_col="fishing_activity",
-        agg="mean",
-        style=MapStyle(
-            color_quantile=None,
-            color_scale="log",
-            alpha_scale=False,
-        ),
-    )
 
     return 0
 
