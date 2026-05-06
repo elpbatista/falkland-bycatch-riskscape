@@ -8,8 +8,9 @@ path = paths["data"] / "features" / "environmental" / "year=2023/part.parquet"
 path = paths["data"] / "features" / "static" / "static.parquet"
 path = paths["data"] / "modeling" / "fishing_training" / "year=2022/part.parquet"
 path = paths["data"] / "modeling" / "species_training" / "year=2022/part.parquet"
-# path = paths["data"] / "modeling" / "predictions" / "year=2022/part.parquet"
-path = paths["data"] / "processed" / "h3_neighbors.parquet"
+path = paths["data"] / "modeling" / "predictions" / "year=2022/part.parquet"
+path = paths["data"] / "modeling" / "predictions" / "extra_trees" / "bbal" / "year=2022/part.parquet"
+# path = paths["data"] / "processed" / "h3_neighbors.parquet"
 # print(df[["sst_grad", "chl_log_grad", "ssh_grad"]].describe())
 
 df = pd.read_parquet(path)
@@ -29,9 +30,14 @@ df = pd.read_parquet(path)
 # print("\nnonzero only")
 # print(df[df["risk_log_pred"] > 0]["risk_log_pred"].describe())
 
-# print("\nTop percentiles:")
-# nonzero = df[df["risk_log_pred"] > 0]
-# print(nonzero["risk_log_pred"].quantile([0.90, 0.95, 0.99, 0.999]))
+print("\nTop percentiles:")
+nonzero = df[df["risk_log_pred"] > 0]
+# print(nonzero["risk_log_pred"].quantile([0.50, 0.75, 0.99, 0.999]))
+print(df["risk_log_pred"].quantile([0.80, 0.98, 0.99, 1.0]))
+# print min and max nonzero values
+print("\nMin:", nonzero["risk_log_pred"].min())
+print("Max:", nonzero["risk_log_pred"].median())
+print("Max:", nonzero["risk_log_pred"].max())
 
 # print("\nConsistency with fishing activity:")
 # print(df[df["risk_log_pred"] > 0]["fishing_activity"].describe())
@@ -70,10 +76,10 @@ df = pd.read_parquet(path)
 
 # print("dropped:", len(env[["h3", "date"]].drop_duplicates()) - len(fg))
 
-df = pd.read_parquet("data/modeling/species_training/year=2022/part.parquet")
+# df = pd.read_parquet("data/modeling/species_training/year=2022/part.parquet")
 
-print(df["residence_index"].quantile([0.5, 0.9, 0.95, 0.99]))
+# print(df["residence_index"].quantile([0.5, 0.9, 0.95, 0.99]))
 
-print(df.groupby("species")["residence_index"].describe())
+# print(df.groupby("species")["residence_index"].describe())
 
-print((df["residence_index"] > 0).mean())
+# print((df["residence_index"] > 0).mean())

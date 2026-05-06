@@ -61,3 +61,15 @@ This comparison highlights the trade-off between predictive performance (ML) and
 `Final hazard = α *ML + (1 - α)* Bayesian`
 
 combine ML + Bayesian into a single hybrid model
+
+## For the report
+
+Risk was modeled as the spatial-temporal overlap between
+predicted species use intensity and observed fishing effort,
+representing a relative encounter-risk surface rather than
+an explicit estimate of bycatch probability.
+
+Bayesian mixture models were used to estimate the ecological
+plausibility of environmental feature combinations, providing
+a probabilistic measure of support for model predictions under
+observed and novel conditions.

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import geopandas as gpd
 from matplotlib import colors
+from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -35,11 +36,15 @@ class MapStyle:
     show_north_arrow: bool = True
     show_reference_map: bool = True
     hide_zero_values: bool = True
+    min_display_value: float | None = None
     color_quantile: float | None = 0.99
     alpha: float = 0.99
     alpha_min: float = 0.0
     alpha_gamma: float = 0.75
     alpha_scale: bool = True
+    colorbar_labels: tuple[str, ...] | None = None
+    colorbar_boundaries: tuple[float, ...] | None = None
+    colorbar_quantiles: tuple[float, ...] | None = None
 
 
 def prediction_path(
@@ -116,6 +121,50 @@ def summarize_h3(
     return grouped
 
 
+def filter_prediction_rows(
+    df: pd.DataFrame,
+    species: str | None = None,
+    month: int | None = None,
+) -> pd.DataFrame:
+    """Return prediction rows for optional species and month filters."""
+    out = df.copy()
+
+    if species is not None:
+        out = out[out["species"] == species]
+
+    if month is not None:
+        out = out[out["date"].dt.month == month]
+
+    if out.empty:
+        raise ValueError("No prediction rows found")
+
+    return out
+
+
+def summarize_hazard_h3(
+    df: pd.DataFrame,
+    species: str | None = None,
+    month: int | None = None,
+    agg: str = "mean",
+    fishing_effort_fraction: float = 0.25,
+) -> pd.DataFrame:
+    """Summarize hazard as species use plus fractional median fishing activity by H3."""
+    out = filter_prediction_rows(df, species=species, month=month)
+
+    grouped = out.groupby("h3", as_index=False).agg(
+        species_use_log_pred=("species_use_log_pred", agg),
+        fishing_activity_log=("fishing_activity_log", "median"),
+    )
+    fishing_fraction_median_log = np.log1p(
+        np.expm1(grouped["fishing_activity_log"]) * fishing_effort_fraction
+    )
+    grouped["hazard_log_pred"] = (
+        grouped["species_use_log_pred"] + fishing_fraction_median_log
+    )
+
+    return grouped[["h3", "hazard_log_pred"]]
+
+
 def legend_label(value_col: str) -> str:
     """Return a readable legend label for a plotted value column."""
     label = value_col.removesuffix("_mean")
@@ -148,6 +197,9 @@ def color_norm(
     vmin = 0.0 if values.min() >= 0 else values.min()
     vmax = values.max()
 
+    if style.colorbar_labels is not None:
+        return binned_color_norm(values, vmin, vmax, style)
+
     if style.color_quantile is not None:
         vmax = values.quantile(style.color_quantile)
         if vmax <= vmin:
@@ -165,6 +217,78 @@ def color_norm(
     return colors.Normalize(vmin=vmin, vmax=vmax)
 
 
+def binned_color_norm(
+    values: pd.Series,
+    vmin: float,
+    vmax: float,
+    style: MapStyle,
+) -> colors.BoundaryNorm:
+    """Return a discrete color normalization for labeled map bands."""
+    labels = style.colorbar_labels
+    if labels is None:
+        raise ValueError("Binned color norm requires colorbar labels")
+
+    if style.colorbar_boundaries is not None and style.colorbar_quantiles is not None:
+        raise ValueError("Use either colorbar boundaries or quantiles, not both")
+
+    if style.colorbar_boundaries is not None:
+        bins = np.asarray(style.colorbar_boundaries, dtype="float64")
+        if len(bins) != len(labels) + 1:
+            raise ValueError(
+                "Colorbar boundaries must have one more value than labels"
+            )
+        if np.any(np.diff(bins) <= 0):
+            raise ValueError("Colorbar boundaries must be strictly increasing")
+    elif style.colorbar_quantiles is not None:
+        quantiles = np.asarray(style.colorbar_quantiles, dtype="float64")
+        if len(quantiles) != len(labels) + 1:
+            raise ValueError(
+                "Colorbar quantiles must have one more value than labels"
+            )
+        if np.any(np.diff(quantiles) <= 0):
+            raise ValueError("Colorbar quantiles must be strictly increasing")
+        if quantiles[0] < 0.0 or quantiles[-1] > 1.0:
+            raise ValueError("Colorbar quantiles must be between 0 and 1")
+
+        bins = values.quantile(quantiles).to_numpy(dtype="float64")
+        if style.color_scale == "log":
+            positive = values[values > 0]
+            if positive.empty:
+                raise ValueError("Log color scale requires positive values")
+            bins[0] = max(bins[0], float(positive.min()))
+
+        if np.any(np.diff(bins) <= 0):
+            raise ValueError("Colorbar quantiles produced duplicate boundaries")
+    elif style.color_scale == "log":
+        positive = values[values > 0]
+        if positive.empty:
+            raise ValueError("Log color scale requires positive values")
+        vmin = float(positive.min())
+        if vmax <= vmin:
+            vmax = vmin * 1.01
+        bins = np.geomspace(vmin, vmax, len(labels) + 1)
+    elif style.color_scale == "linear":
+        if vmax <= vmin:
+            vmax = vmin + 1.0
+        bins = np.linspace(vmin, vmax, len(labels) + 1)
+    else:
+        raise ValueError(f"Unknown color scale: {style.color_scale}")
+
+    return colors.BoundaryNorm(
+        boundaries=bins,
+        ncolors=plt.get_cmap(style.cmap).N,
+        clip=True,
+    )
+
+
+def norm_limits(norm: colors.Normalize) -> tuple[float, float]:
+    """Return lower and upper bounds for a color normalization."""
+    if isinstance(norm, colors.BoundaryNorm):
+        return float(norm.boundaries[0]), float(norm.boundaries[-1])
+
+    return float(norm.vmin), float(norm.vmax)
+
+
 def plottable_values(
     gdf: gpd.GeoDataFrame,
     value_col: str,
@@ -173,7 +297,9 @@ def plottable_values(
     """Return rows that should be drawn on the map."""
     plot_gdf = gdf.dropna(subset=[value_col]).copy()
 
-    if style.hide_zero_values:
+    if style.min_display_value is not None:
+        plot_gdf = plot_gdf[plot_gdf[value_col] > style.min_display_value].copy()
+    elif style.hide_zero_values:
         plot_gdf = plot_gdf[plot_gdf[value_col] > 0].copy()
 
     if plot_gdf.empty:
@@ -189,10 +315,14 @@ def map_facecolors(
 ) -> np.ndarray:
     """Return RGBA face colors for the H3 polygons."""
     cmap = plt.get_cmap(style.cmap)
-    facecolors = cmap(norm(values.clip(upper=norm.vmax)))
+    vmin, vmax = norm_limits(norm)
+    facecolors = cmap(norm(values.clip(lower=vmin, upper=vmax)))
 
     if style.alpha_scale:
-        scaled_values = pd.Series(norm(values), index=values.index)
+        scaled = norm(values)
+        if isinstance(norm, colors.BoundaryNorm):
+            scaled = scaled / (plt.get_cmap(style.cmap).N - 1)
+        scaled_values = pd.Series(scaled, index=values.index)
         facecolors[:, -1] = scaled_alpha(scaled_values, 0.0, 1.0, style)
     else:
         facecolors[:, -1] = style.alpha
@@ -223,12 +353,56 @@ def draw_prediction_colorbar(
     style: MapStyle,
 ) -> None:
     """Draw a compact low/high colorbar."""
+    if style.colorbar_labels is not None:
+        draw_labeled_colorbar(ax, value_col, norm, style)
+        return
+
     draw_compact_colorbar(
         ax=ax,
         cmap=style.cmap,
         norm=norm,
         label=legend_label(value_col),
     )
+
+
+def draw_labeled_colorbar(
+    ax,
+    value_col: str,
+    norm: colors.Normalize,
+    style: MapStyle,
+) -> None:
+    """Draw a discrete colorbar with category labels."""
+    if not isinstance(norm, colors.BoundaryNorm):
+        raise TypeError("Labeled colorbar requires BoundaryNorm")
+
+    boundaries = norm.boundaries
+    ticks = (boundaries[:-1] + boundaries[1:]) / 2
+
+    if style.color_scale == "log":
+        ticks = np.sqrt(boundaries[:-1] * boundaries[1:])
+
+    cbar = ax.figure.colorbar(
+        ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
+        ax=ax,
+        label=legend_label(value_col),
+        ticks=ticks,
+        spacing="uniform",
+        shrink=0.28,
+        aspect=len(style.colorbar_labels),
+        pad=0.02,
+        fraction=0.035,
+        drawedges=True,
+    )
+    cbar.outline.set_visible(True)
+    cbar.outline.set_edgecolor("#8a8a8a")
+    cbar.outline.set_linewidth(0.8)
+    cbar.dividers.set_color("#8a8a8a")
+    cbar.dividers.set_linewidth(0.6)
+    cbar.ax.set_yticklabels(style.colorbar_labels)
+    cbar.ax.tick_params(which="both", length=0)
+    cbar.ax.minorticks_off()
+    if cbar.solids is not None:
+        cbar.solids.set_edgecolor("face")
 
 
 def prediction_labels(
@@ -244,6 +418,35 @@ def prediction_labels(
         model_name if model_name is not None else "default_model",
         product_name if product_name is not None else "default_product",
     )
+
+
+def map_title(
+    title: str,
+    year: int | None = None,
+    species: str | None = None,
+    month: int | None = None,
+    model_name: str | None = None,
+    product_name: str | None = None,
+) -> str:
+    """Return a map title with prediction metadata appended when present."""
+    parts = [title]
+
+    model_parts = [
+        part for part in (model_name, product_name) if part is not None
+    ]
+    if model_parts:
+        parts.append("/".join(model_parts))
+
+    if species is not None:
+        parts.append(species)
+
+    if year is not None:
+        parts.append(str(year))
+
+    if month is not None:
+        parts.append(f"month {month:02d}")
+
+    return " - ".join(parts)
 
 
 def plot_h3_map(
@@ -300,6 +503,7 @@ def plot_prediction_map(
     agg: str = "mean",
     model_name: str | None = None,
     product_name: str | None = None,
+    title: str | None = None,
     style: MapStyle | None = None,
 ) -> Path:
     """Plot summarized prediction map."""
@@ -329,9 +533,13 @@ def plot_prediction_map(
         product_name=product_name,
     )
 
-    title = (
-        f"{value_col} ({agg}) - {species_label} - "
-        f"{model_label}/{product_label} - {year} - {month_label}"
+    plot_title = map_title(
+        title or f"{legend_label(value_col)} ({agg})",
+        year=year,
+        species=species,
+        month=month,
+        model_name=model_name,
+        product_name=product_name,
     )
 
     out_file = (
@@ -342,7 +550,70 @@ def plot_prediction_map(
     return plot_h3_map(
         gdf=gdf,
         value_col=value_name,
-        title=title,
+        title=plot_title,
+        out_file=out_file,
+        style=style,
+    )
+
+
+def plot_hazard_map(
+    year: int,
+    species: str | None = None,
+    month: int | None = None,
+    agg: str = "mean",
+    fishing_effort_fraction: float = 0.25,
+    model_name: str | None = None,
+    product_name: str | None = None,
+    title: str | None = None,
+    style: MapStyle | None = None,
+) -> Path:
+    """Plot hazard as species use plus fractional median fishing activity."""
+    df = load_predictions(
+        year=year,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    summary = summarize_hazard_h3(
+        df=df,
+        species=species,
+        month=month,
+        agg=agg,
+        fishing_effort_fraction=fishing_effort_fraction,
+    )
+
+    grid = load_grid(uint64=True)
+    gdf = grid.merge(summary, on="h3", how="left")
+
+    species_label, month_label, model_label, product_label = prediction_labels(
+        species=species,
+        month=month,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    plot_title = map_title(
+        title
+        or (
+            f"Hazard ({agg} species use + "
+            f"{fishing_effort_fraction:g} median fishing)"
+        ),
+        year=year,
+        species=species,
+        month=month,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    out_file = (
+        figure_root(model_name=model_name, product_name=product_name)
+        / f"hazard_log_pred_{agg}_{species_label}_{year}_{month_label}.png"
+    )
+
+    return plot_h3_map(
+        gdf=gdf,
+        value_col="hazard_log_pred",
+        title=plot_title,
         out_file=out_file,
         style=style,
     )

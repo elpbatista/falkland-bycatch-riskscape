@@ -548,7 +548,6 @@ def output_columns(model_name: str) -> list[str]:
         "date",
         "species",
         "species_use_log_pred",
-        "fishing_activity",
         "fishing_activity_log",
         "risk_log_pred",
     ]
