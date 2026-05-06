@@ -52,6 +52,12 @@ def summarize_fishing_activity(
     if out.empty:
         raise ValueError("No fishing activity rows found")
 
+    if agg == "mean":
+        out = out[out[value_col] > 0].copy()
+
+    if out.empty:
+        raise ValueError(f"No positive fishing activity rows found for {value_col}")
+
     value_name = f"{value_col}_{agg}"
 
     return (

@@ -1,17 +1,20 @@
 """Plot species prediction maps."""
 
-from riskscape.visualization.maps import MapStyle, plot_hazard_map, plot_prediction_map
-
+from riskscape.visualization.maps import (
+    MINIMUM_EFFORT_UNIT,
+    MINIMUM_RISK_UNIT,
+    MapStyle,
+    plot_hazard_map,
+    plot_prediction_map,
+)
 
 RISK_STYLE = MapStyle(
     color_scale="log",
     alpha_scale=False,
-    min_display_value=0.01,
+    min_display_value=MINIMUM_RISK_UNIT,
     colorbar_labels=("Low", "Mod", "High", "Xtrm"),
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )
-# 0.5 vessel-hours per H3 cell/day
-HAZARD_MINIMUM_EFFORT_UNIT = 0.5
 
 
 def main() -> int:
@@ -50,7 +53,7 @@ def main() -> int:
             value_col="risk_log_pred",
             species=species,
             agg="mean",
-            title="Risk",
+            title="Realized Risk",
             style=RISK_STYLE,
         )
 
@@ -60,8 +63,8 @@ def main() -> int:
             product_name=product_name,
             species=species,
             agg="mean",
-            minimum_effort_unit=HAZARD_MINIMUM_EFFORT_UNIT,
-            title="Hazard",
+            minimum_effort_unit=MINIMUM_EFFORT_UNIT,
+            title="Latent Hazard",
             style=RISK_STYLE,
         )
 

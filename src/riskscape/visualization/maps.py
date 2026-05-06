@@ -24,6 +24,13 @@ from riskscape.visualization.base_map import (
 )
 
 
+# 0.5 vessel-hours per H3 cell/day
+MINIMUM_EFFORT_UNIT = 0.5
+MINIMUM_SPECIES_USE_UNIT = 0.0
+MINIMUM_RISK_UNIT = np.log1p(MINIMUM_EFFORT_UNIT) + np.log1p(
+    MINIMUM_SPECIES_USE_UNIT
+)
+
 @dataclass(frozen=True)
 class MapStyle:
     """Visual settings for prediction maps."""
@@ -112,6 +119,12 @@ def summarize_h3(
     if out.empty:
         raise ValueError("No prediction rows found")
 
+    if agg == "mean":
+        out = out[out[value_col] > 0].copy()
+
+    if out.empty:
+        raise ValueError(f"No positive prediction rows found for {value_col}")
+
     grouped = (
         out.groupby("h3", as_index=False)[value_col]
         .agg(agg)
@@ -146,10 +159,16 @@ def summarize_hazard_h3(
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
-    minimum_effort_unit: float = 0.25,
+    minimum_effort_unit: float = MINIMUM_EFFORT_UNIT,
 ) -> pd.DataFrame:
     """Summarize hazard as species use plus a fixed minimum effort unit by H3."""
     out = filter_prediction_rows(df, species=species, month=month)
+
+    if agg == "mean":
+        out = out[out["species_use_log_pred"] > 0].copy()
+
+    if out.empty:
+        raise ValueError("No positive species-use prediction rows found")
 
     grouped = out.groupby("h3", as_index=False).agg(
         species_use_log_pred=("species_use_log_pred", agg),
@@ -560,7 +579,7 @@ def plot_hazard_map(
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
-    minimum_effort_unit: float = 0.25,
+    minimum_effort_unit: float = MINIMUM_EFFORT_UNIT,
     model_name: str | None = None,
     product_name: str | None = None,
     title: str | None = None,
