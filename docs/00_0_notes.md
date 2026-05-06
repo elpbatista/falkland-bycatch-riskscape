@@ -75,3 +75,7 @@ a probabilistic measure of support for model predictions under
 observed and novel conditions.
 
 At H3 resolution 6, a minimum operational exposure unit of 0.5 vessel-hours per cell-day was used, corresponding approximately to one vessel operating within or traversing a grid cell for about 30 minutes at fishing speed.
+
+Although likelihood-based models performed poorly as direct predictors of residence intensity, they were retained as probabilistic environmental-support models. Their purpose was to characterize the multivariate feature space associated with observed species use and to identify cell-days whose environmental conditions resemble known-use conditions.
+
+The Bayesian/GMM model was not used as a direct residence-intensity predictor. Instead, its normalized likelihood was used as an environmental-support weight applied to the machine-learning species-use prediction.
