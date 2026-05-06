@@ -36,6 +36,8 @@ class MapStyle:
     """Visual settings for prediction maps."""
 
     cmap: str = "YlOrRd"
+    color_palette: tuple[str, ...] | None = None
+    face_color: str | None = None
     color_scale: str = "linear"
     bathymetry: bool = True
     bathymetry_log_scale: bool = False
@@ -44,6 +46,8 @@ class MapStyle:
     show_reference_map: bool = True
     hide_zero_values: bool = True
     min_display_value: float | None = None
+    color_min: float | None = None
+    color_max: float | None = None
     color_quantile: float | None = 0.99
     alpha: float = 0.99
     alpha_min: float = 0.0
@@ -204,18 +208,30 @@ def scaled_alpha(
     return (style.alpha_min + scaled * (style.alpha - style.alpha_min)).to_numpy()
 
 
+def style_colormap(style: MapStyle) -> colors.Colormap:
+    """Return the colormap for a map style."""
+    if style.color_palette is not None:
+        return colors.ListedColormap(style.color_palette)
+
+    return plt.get_cmap(style.cmap)
+
+
 def color_norm(
     values: pd.Series,
     style: MapStyle,
 ) -> colors.Normalize:
     """Return color normalization for plotted values."""
-    vmin = 0.0 if values.min() >= 0 else values.min()
-    vmax = values.max()
+    vmin = (
+        style.color_min
+        if style.color_min is not None
+        else 0.0 if values.min() >= 0 else values.min()
+    )
+    vmax = style.color_max if style.color_max is not None else values.max()
 
     if style.colorbar_labels is not None:
         return binned_color_norm(values, vmin, vmax, style)
 
-    if style.color_quantile is not None:
+    if style.color_quantile is not None and style.color_max is None:
         vmax = values.quantile(style.color_quantile)
         if vmax <= vmin:
             vmax = values.max()
@@ -291,7 +307,7 @@ def binned_color_norm(
 
     return colors.BoundaryNorm(
         boundaries=bins,
-        ncolors=plt.get_cmap(style.cmap).N,
+        ncolors=style_colormap(style).N,
         clip=True,
     )
 
@@ -329,14 +345,18 @@ def map_facecolors(
     style: MapStyle,
 ) -> np.ndarray:
     """Return RGBA face colors for the H3 polygons."""
-    cmap = plt.get_cmap(style.cmap)
     vmin, vmax = norm_limits(norm)
-    facecolors = cmap(norm(values.clip(lower=vmin, upper=vmax)))
+
+    if style.face_color is None:
+        cmap = style_colormap(style)
+        facecolors = cmap(norm(values.clip(lower=vmin, upper=vmax)))
+    else:
+        facecolors = np.tile(colors.to_rgba(style.face_color), (len(values), 1))
 
     if style.alpha_scale:
         scaled = norm(values)
         if isinstance(norm, colors.BoundaryNorm):
-            scaled = scaled / (plt.get_cmap(style.cmap).N - 1)
+            scaled = scaled / (style_colormap(style).N - 1)
         scaled_values = pd.Series(scaled, index=values.index)
         facecolors[:, -1] = scaled_alpha(scaled_values, 0.0, 1.0, style)
     else:
@@ -397,7 +417,7 @@ def draw_labeled_colorbar(
         ticks = np.sqrt(boundaries[:-1] * boundaries[1:])
 
     cbar = ax.figure.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
+        ScalarMappable(norm=norm, cmap=style_colormap(style)),
         ax=ax,
         label=legend_label(value_col),
         ticks=ticks,
