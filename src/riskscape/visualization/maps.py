@@ -540,7 +540,10 @@ def plot_prediction_map(
 
     out_file = (
         figure_root(model_name=model_name, product_name=product_name)
-        / f"{value_col}_{agg}_{species_label}_{year}_{month_label}.png"
+        / (
+            f"{model_label}_{product_label}_{value_col}_{agg}_"
+            f"{species_label}_{year}_{month_label}.png"
+        )
     )
 
     return plot_h3_map(
@@ -603,7 +606,10 @@ def plot_hazard_map(
 
     out_file = (
         figure_root(model_name=model_name, product_name=product_name)
-        / f"hazard_log_pred_{agg}_{species_label}_{year}_{month_label}.png"
+        / (
+            f"{model_label}_{product_label}_hazard_log_pred_{agg}_"
+            f"{species_label}_{year}_{month_label}.png"
+        )
     )
 
     return plot_h3_map(

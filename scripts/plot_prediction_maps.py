@@ -18,20 +18,21 @@ def main() -> int:
     """Run prediction map plots."""
     year = 2022
     model_name = "extra_trees"
-    product_name = "bbal"
 
-    print("Example:")
-    print(
-        "plot_prediction_map("
-        "year=2022, model_name='extra_trees', product_name='bbal', "
-        "value_col='risk_log_pred', species='BBAL')"
-    )
-    print(
-        "Input: "
-        "data/modeling/predictions/extra_trees/bbal/year=2022/part.parquet"
-    )
+    prediction_products = [
+        ("bbal", "BBAL"),
+        ("safs", "SAFS"),
+        ("joint", "BBAL"),
+        ("joint", "SAFS"),
+    ]
 
-    for product_name, species in [("bbal", "BBAL"), ("safs", "SAFS")]:
+    for product_name, species in prediction_products:
+        print(
+            "Input: "
+            f"data/modeling/predictions/{model_name}/{product_name}/"
+            f"year={year}/part.parquet"
+        )
+
         plot_prediction_map(
             year=year,
             model_name=model_name,
