@@ -26,10 +26,6 @@ from riskscape.visualization.base_map import (
 
 # 0.5 vessel-hours per H3 cell/day
 MINIMUM_EFFORT_UNIT = 0.5
-MINIMUM_SPECIES_USE_UNIT = 0.0
-MINIMUM_RISK_UNIT = np.log1p(MINIMUM_EFFORT_UNIT) + np.log1p(
-    MINIMUM_SPECIES_USE_UNIT
-)
 
 @dataclass(frozen=True)
 class MapStyle:
@@ -49,8 +45,8 @@ class MapStyle:
     color_min: float | None = None
     color_max: float | None = None
     color_quantile: float | None = 0.99
-    alpha: float = 0.99
-    alpha_min: float = 0.0
+    alpha: float = 0.9
+    alpha_min: float = 0.2
     alpha_gamma: float = 0.75
     alpha_scale: bool = True
     colorbar_labels: tuple[str, ...] | None = None
@@ -167,18 +163,20 @@ def summarize_hazard_h3(
 ) -> pd.DataFrame:
     """Summarize hazard as species use plus a fixed minimum effort unit by H3."""
     out = filter_prediction_rows(df, species=species, month=month)
-
-    if agg == "mean":
-        out = out[out["species_use_log_pred"] > 0].copy()
+    out = out.copy()
+    out["species_use_pred"] = np.expm1(out["species_use_log_pred"]).clip(
+        lower=0.0
+    )
+    out = out[out["species_use_pred"] > 0].copy()
 
     if out.empty:
         raise ValueError("No positive species-use prediction rows found")
 
     grouped = out.groupby("h3", as_index=False).agg(
-        species_use_log_pred=("species_use_log_pred", agg),
+        species_use_pred=("species_use_pred", agg),
     )
     grouped["hazard_log_pred"] = (
-        grouped["species_use_log_pred"] + np.log1p(minimum_effort_unit)
+        np.log1p(grouped["species_use_pred"]) + np.log1p(minimum_effort_unit)
     )
 
     return grouped[["h3", "hazard_log_pred"]]
@@ -282,11 +280,14 @@ def binned_color_norm(
             raise ValueError("Colorbar quantiles must be between 0 and 1")
 
         bins = values.quantile(quantiles).to_numpy(dtype="float64")
+        if style.color_min is not None:
+            bins[0] = style.color_min
         if style.color_scale == "log":
             positive = values[values > 0]
             if positive.empty:
                 raise ValueError("Log color scale requires positive values")
-            bins[0] = max(bins[0], float(positive.min()))
+            if style.color_min is None:
+                bins[0] = max(bins[0], float(positive.min()))
 
         if np.any(np.diff(bins) <= 0):
             raise ValueError("Colorbar quantiles produced duplicate boundaries")

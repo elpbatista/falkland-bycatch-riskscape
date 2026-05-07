@@ -3,7 +3,6 @@
 from riskscape.config import paths
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
-    MINIMUM_RISK_UNIT,
     MapStyle,
     plot_hazard_map,
     plot_prediction_map,
@@ -13,12 +12,16 @@ RISK_STYLE = MapStyle(
     color_scale="log",
     alpha_scale=False,
     show_reference_map=False,
-    min_display_value=MINIMUM_RISK_UNIT * 0.75,
+    min_display_value=MINIMUM_EFFORT_UNIT,
+    color_min=MINIMUM_EFFORT_UNIT,
     colorbar_labels=("Low", "Mod", "High", "Xtrm"),
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )
 
-SPECIES_USE_STYLE = MapStyle(show_reference_map=False)
+SPECIES_USE_STYLE = MapStyle(
+    show_reference_map=False,
+    min_display_value=0.0,
+)
 
 
 def main() -> int:
@@ -26,12 +29,13 @@ def main() -> int:
     year = 2022
     model_names = [
         # "extra_trees",
-        "hybrid_presence_gate_extra_trees_bayesian_gmm",
+        # "hybrid_presence_gate_extra_trees_bayesian_gmm",
+        "bayesian_gmm",
     ]
 
     prediction_products = [
-        # ("bbal", "BBAL"),
-        # ("safs", "SAFS"),
+        ("bbal", "BBAL"),
+        ("safs", "SAFS"),
         ("joint", "BBAL"),
         ("joint", "SAFS"),
     ]

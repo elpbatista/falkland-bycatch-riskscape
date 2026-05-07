@@ -53,8 +53,8 @@ HYBRID_SUPPORT_THRESHOLD = 1.0
 # Maximum fraction cut from the Extra Trees species-use prediction
 # when Bayesian/GMM plausibility is zero.
 HYBRID_GATE_MAX_CUTS = {
-    "BBAL": 0.00,
-    "SAFS": 0.01,
+    "BBAL": 0.1,
+    "SAFS": 0.5,
 }
 
 BATCH_ROWS = 250_000
