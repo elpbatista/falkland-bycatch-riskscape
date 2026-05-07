@@ -27,10 +27,12 @@ from riskscape.visualization.base_map import (
 # 0.5 vessel-hours per H3 cell/day
 MINIMUM_EFFORT_UNIT = 0.5
 
+
 @dataclass(frozen=True)
 class MapStyle:
     """Visual settings for prediction maps."""
 
+    title: str | None = None
     cmap: str = "YlOrRd"
     color_palette: tuple[str, ...] | None = None
     face_color: str | None = None
@@ -49,6 +51,7 @@ class MapStyle:
     alpha_min: float = 0.2
     alpha_gamma: float = 0.75
     alpha_scale: bool = True
+    alpha_col: str | None = None
     colorbar_labels: tuple[str, ...] | None = None
     colorbar_boundaries: tuple[float, ...] | None = None
     colorbar_quantiles: tuple[float, ...] | None = None
@@ -71,6 +74,23 @@ def prediction_path(
     return path / f"year={year}" / "part.parquet"
 
 
+def plausibility_path(
+    year: int,
+    model_name: str,
+    product_name: str,
+) -> Path:
+    """Return plausibility partition path."""
+    return (
+        paths["data"]
+        / "modeling"
+        / "plausibility"
+        / model_name
+        / product_name
+        / f"year={year}"
+        / "part.parquet"
+    )
+
+
 def figure_root(
     model_name: str | None = None,
     product_name: str | None = None,
@@ -78,6 +98,13 @@ def figure_root(
     """Return figure output directory."""
     path = paths["plots"] / "predictions"
 
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def plausibility_figure_root() -> Path:
+    """Return plausibility figure output directory."""
+    path = paths["plots"] / "plausibility"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -98,6 +125,65 @@ def load_predictions(
         raise FileNotFoundError(f"Prediction file not found: {path}")
 
     return pd.read_parquet(path)
+
+
+def load_plausibility(
+    year: int,
+    model_name: str,
+    product_name: str,
+) -> pd.DataFrame:
+    """Load plausibility output for one year/model/product."""
+    path = plausibility_path(
+        year=year,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    if not path.exists():
+        raise FileNotFoundError(f"Plausibility file not found: {path}")
+
+    return pd.read_parquet(path, columns=["h3", "species", "plausibility"])
+
+
+def aggregation_name(agg: str) -> str:
+    """Return the aggregation name for output columns and filenames."""
+    if agg in {"nonzero_median", "nonzero_mean"}:
+        raise ValueError(
+            "Use explicit aggregation names: non_zero_median or non_zero_mean"
+        )
+
+    return agg
+
+
+def aggregate_h3_values(
+    df: pd.DataFrame,
+    value_col: str,
+    agg: str,
+) -> pd.DataFrame:
+    """Aggregate H3 values, including non-zero-only summary modes."""
+    agg_name = aggregation_name(agg)
+
+    if agg_name in {"non_zero_median", "non_zero_mean"}:
+
+        def non_zero_stat(values: pd.Series) -> float:
+            non_zero = values[values > 0]
+            if non_zero.empty:
+                return 0.0
+            if agg_name == "non_zero_median":
+                return float(non_zero.median())
+            return float(non_zero.mean())
+
+        return (
+            df.groupby("h3", as_index=False)[value_col]
+            .agg(non_zero_stat)
+            .rename(columns={value_col: f"{value_col}_{agg_name}"})
+        )
+
+    return (
+        df.groupby("h3", as_index=False)[value_col]
+        .agg(agg)
+        .rename(columns={value_col: f"{value_col}_{agg_name}"})
+    )
 
 
 def summarize_h3(
@@ -125,11 +211,35 @@ def summarize_h3(
     if out.empty:
         raise ValueError(f"No positive prediction rows found for {value_col}")
 
-    grouped = (
-        out.groupby("h3", as_index=False)[value_col]
-        .agg(agg)
-        .rename(columns={value_col: f"{value_col}_{agg}"})
-    )
+    return aggregate_h3_values(out, value_col=value_col, agg=agg)
+
+
+def summarize_plausibility_h3(
+    df: pd.DataFrame,
+    species: str,
+    value_col: str = "plausibility",
+    agg: str = "mean",
+    confidence_threshold: float | None = None,
+) -> pd.DataFrame:
+    """Summarize plausibility by H3 cell."""
+    if value_col not in df.columns:
+        raise ValueError(f"Missing plausibility column: {value_col}")
+
+    out = df[df["species"] == species].dropna(subset=["h3", value_col]).copy()
+
+    if out.empty:
+        raise ValueError(f"No plausibility rows found for {species}")
+
+    out["h3"] = out["h3"].astype("uint64")
+    agg_name = aggregation_name(agg)
+    value_name = f"{value_col}_{agg_name}"
+    grouped = aggregate_h3_values(out, value_col=value_col, agg=agg_name)
+
+    if confidence_threshold is not None:
+        grouped.loc[
+            grouped[value_name] < confidence_threshold,
+            value_name,
+        ] = 0.0
 
     return grouped
 
@@ -172,11 +282,15 @@ def summarize_hazard_h3(
     if out.empty:
         raise ValueError("No positive species-use prediction rows found")
 
-    grouped = out.groupby("h3", as_index=False).agg(
-        species_use_pred=("species_use_pred", agg),
+    agg_name = aggregation_name(agg)
+    species_use_col = f"species_use_pred_{agg_name}"
+    grouped = aggregate_h3_values(
+        out,
+        value_col="species_use_pred",
+        agg=agg_name,
     )
     grouped["hazard_log_pred"] = (
-        np.log1p(grouped["species_use_pred"]) + np.log1p(minimum_effort_unit)
+        np.log1p(grouped[species_use_col]) + np.log1p(minimum_effort_unit)
     )
 
     return grouped[["h3", "hazard_log_pred"]]
@@ -337,6 +451,14 @@ def plottable_values(
     if plot_gdf.empty:
         raise ValueError(f"No plottable values found for {value_col}")
 
+    if style.alpha_col is not None:
+        if style.alpha_col not in plot_gdf.columns:
+            raise ValueError(f"Missing alpha column: {style.alpha_col}")
+
+        plot_gdf = plot_gdf.dropna(subset=[style.alpha_col]).copy()
+        if plot_gdf.empty:
+            raise ValueError(f"No plottable alpha values found for {style.alpha_col}")
+
     return plot_gdf
 
 
@@ -344,6 +466,7 @@ def map_facecolors(
     values: pd.Series,
     norm: colors.Normalize,
     style: MapStyle,
+    alpha_values: pd.Series | None = None,
 ) -> np.ndarray:
     """Return RGBA face colors for the H3 polygons."""
     vmin, vmax = norm_limits(norm)
@@ -354,7 +477,9 @@ def map_facecolors(
     else:
         facecolors = np.tile(colors.to_rgba(style.face_color), (len(values), 1))
 
-    if style.alpha_scale:
+    if alpha_values is not None:
+        facecolors[:, -1] = alpha_values.clip(0.0, 1.0).to_numpy()
+    elif style.alpha_scale:
         scaled = norm(values)
         if isinstance(norm, colors.BoundaryNorm):
             scaled = scaled / (style_colormap(style).N - 1)
@@ -374,9 +499,11 @@ def draw_prediction_layer(
     style: MapStyle,
 ) -> None:
     """Draw the prediction polygons."""
+    alpha_values = gdf[style.alpha_col] if style.alpha_col is not None else None
+
     gdf.plot(
         ax=ax,
-        color=map_facecolors(gdf[value_col], norm, style),
+        color=map_facecolors(gdf[value_col], norm, style, alpha_values),
         edgecolor="none",
         linewidth=0,
     )
@@ -485,6 +612,21 @@ def map_title(
     return " - ".join(parts)
 
 
+def style_title(
+    style: MapStyle | None,
+    title: str | None,
+    default: str,
+) -> str:
+    """Return the plot title text before map metadata is appended."""
+    if title is not None:
+        return title
+
+    if style is not None and style.title is not None:
+        return style.title
+
+    return default
+
+
 def plot_h3_map(
     gdf: gpd.GeoDataFrame,
     value_col: str,
@@ -558,7 +700,8 @@ def plot_prediction_map(
     )
 
     grid = load_grid(uint64=True)
-    value_name = f"{value_col}_{agg}"
+    agg_name = aggregation_name(agg)
+    value_name = f"{value_col}_{agg_name}"
 
     gdf = grid.merge(summary, on="h3", how="left")
 
@@ -570,7 +713,7 @@ def plot_prediction_map(
     )
 
     plot_title = map_title(
-        title or f"{legend_label(value_col)} ({agg})",
+        style_title(style, title, f"{legend_label(value_col)} ({agg_name})"),
         year=year,
         species=species,
         month=month,
@@ -581,9 +724,69 @@ def plot_prediction_map(
     out_file = (
         figure_root(model_name=model_name, product_name=product_name)
         / (
-            f"{model_label}_{product_label}_{value_col}_{agg}_"
+            f"{model_label}_{product_label}_{value_col}_{agg_name}_"
             f"{species_label}_{year}_{month_label}.png"
         )
+    )
+
+    return plot_h3_map(
+        gdf=gdf,
+        value_col=value_name,
+        title=plot_title,
+        out_file=out_file,
+        style=style,
+    )
+
+
+def plot_plausibility_map(
+    year: int,
+    model_name: str,
+    product_name: str,
+    species: str,
+    value_col: str = "plausibility",
+    agg: str = "mean",
+    confidence_threshold: float | None = None,
+    title: str | None = None,
+    style: MapStyle | None = None,
+) -> Path:
+    """Plot summarized environmental plausibility map."""
+    df = load_plausibility(
+        year=year,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    summary = summarize_plausibility_h3(
+        df=df,
+        species=species,
+        value_col=value_col,
+        agg=agg,
+        confidence_threshold=confidence_threshold,
+    )
+
+    grid = load_grid(uint64=True)
+    agg_name = aggregation_name(agg)
+    value_name = f"{value_col}_{agg_name}"
+    gdf = grid.merge(summary, on="h3", how="left")
+
+    species_label, _, model_label, product_label = prediction_labels(
+        species=species,
+        month=None,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    plot_title = map_title(
+        style_title(style, title, f"{legend_label(value_col)} ({agg_name})"),
+        year=year,
+        species=species,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    out_file = (
+        plausibility_figure_root()
+        / f"{model_label}_{product_label}_{value_col}_{agg_name}_{species_label}_{year}.png"
     )
 
     return plot_h3_map(
@@ -623,6 +826,7 @@ def plot_hazard_map(
 
     grid = load_grid(uint64=True)
     gdf = grid.merge(summary, on="h3", how="left")
+    agg_name = aggregation_name(agg)
 
     species_label, month_label, model_label, product_label = prediction_labels(
         species=species,
@@ -632,10 +836,11 @@ def plot_hazard_map(
     )
 
     plot_title = map_title(
-        title
-        or (
-            f"Hazard ({agg} species use + "
-            f"{minimum_effort_unit:g} effort unit)"
+        style_title(
+            style,
+            title,
+            f"Hazard ({agg_name} species use + "
+            f"{minimum_effort_unit:g} effort unit)",
         ),
         year=year,
         species=species,
@@ -647,7 +852,7 @@ def plot_hazard_map(
     out_file = (
         figure_root(model_name=model_name, product_name=product_name)
         / (
-            f"{model_label}_{product_label}_hazard_log_pred_{agg}_"
+            f"{model_label}_{product_label}_hazard_log_pred_{agg_name}_"
             f"{species_label}_{year}_{month_label}.png"
         )
     )
@@ -658,4 +863,96 @@ def plot_hazard_map(
         title=plot_title,
         out_file=out_file,
         style=style,
+    )
+
+
+def plot_hazard_plausibility_map(
+    year: int,
+    model_name: str,
+    product_name: str,
+    species: str,
+    month: int | None = None,
+    agg: str = "mean",
+    plausibility_agg: str = "non_zero_median",
+    confidence_threshold: float | None = None,
+    minimum_effort_unit: float = MINIMUM_EFFORT_UNIT,
+    title: str | None = None,
+    style: MapStyle | None = None,
+) -> Path:
+    """Plot hazard color with environmental plausibility as polygon alpha."""
+    predictions = load_predictions(
+        year=year,
+        model_name=model_name,
+        product_name=product_name,
+    )
+    hazard = summarize_hazard_h3(
+        df=predictions,
+        species=species,
+        month=month,
+        agg=agg,
+        minimum_effort_unit=minimum_effort_unit,
+    )
+    agg_name = aggregation_name(agg)
+    plausibility_agg_name = aggregation_name(plausibility_agg)
+
+    if "plausibility" in predictions.columns:
+        plausibility_df = predictions
+    else:
+        plausibility_df = load_plausibility(
+            year=year,
+            model_name=model_name,
+            product_name=product_name,
+        )
+
+    plausibility = summarize_plausibility_h3(
+        df=plausibility_df,
+        species=species,
+        agg=plausibility_agg,
+        confidence_threshold=confidence_threshold,
+    )
+
+    grid = load_grid(uint64=True)
+    gdf = (
+        grid.merge(hazard, on="h3", how="left")
+        .merge(plausibility, on="h3", how="left")
+    )
+
+    species_label, month_label, model_label, product_label = prediction_labels(
+        species=species,
+        month=month,
+        model_name=model_name,
+        product_name=product_name,
+    )
+
+    plot_style = style or MapStyle(
+        alpha_scale=False,
+        alpha_col=f"plausibility_{plausibility_agg_name}",
+    )
+    plot_title = map_title(
+        style_title(
+            plot_style,
+            title,
+            f"Latent Hazard With Plausibility Alpha ({plausibility_agg_name})",
+        ),
+        year=year,
+        species=species,
+        month=month,
+        model_name=model_name,
+        product_name=product_name,
+    )
+    out_file = (
+        figure_root(model_name=model_name, product_name=product_name)
+        / (
+            f"{model_label}_{product_label}_hazard_log_pred_"
+            f"plausibility_alpha_{agg_name}_{plausibility_agg_name}_"
+            f"{species_label}_{year}_{month_label}.png"
+        )
+    )
+
+    return plot_h3_map(
+        gdf=gdf,
+        value_col="hazard_log_pred",
+        title=plot_title,
+        out_file=out_file,
+        style=plot_style,
     )
