@@ -13,6 +13,11 @@ from riskscape.visualization.maps import (
     plot_prediction_map,
 )
 
+SPECIES_USE_MAP_NAME = "Species Use"
+REALIZED_RISK_MAP_NAME = "Realized Risk"
+LATENT_MINIMUM_RISK_MAP_NAME = "Latent Minimum Risk"
+LATENT_MINIMUM_PLAUSIBLE_RISK_MAP_NAME = "Latent Minimum Plausible Risk"
+
 RISK_STYLE = MapStyle(
     color_scale="log",
     alpha_scale=False,
@@ -23,23 +28,25 @@ RISK_STYLE = MapStyle(
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )
 
-REALIZED_RISK_STYLE = replace(RISK_STYLE, title="Realized Risk")
-HAZARD_STYLE = replace(RISK_STYLE, title="Latent Minimum Risk")
-
-HAZARD_PLAUSIBILITY_STYLE = MapStyle(
-    title="Latent Minimum Plausible Risk",
-    color_scale="log",
-    alpha_scale=False,
-    alpha_col="plausibility_non_zero_median",
-    show_reference_map=False,
-    min_display_value=MINIMUM_EFFORT_UNIT,
-    color_min=MINIMUM_EFFORT_UNIT,
-    colorbar_labels=("Low", "Mod", "High", "Xtrm"),
-    colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
+REALIZED_RISK_STYLE = replace(
+    RISK_STYLE,
+    title=REALIZED_RISK_MAP_NAME,
+    colorbar_title=REALIZED_RISK_MAP_NAME,
+)
+HAZARD_STYLE = replace(
+    RISK_STYLE,
+    title=LATENT_MINIMUM_RISK_MAP_NAME,
+    colorbar_title=LATENT_MINIMUM_RISK_MAP_NAME,
+)
+HAZARD_PLAUSIBILITY_STYLE = replace(
+    RISK_STYLE,
+    title=LATENT_MINIMUM_PLAUSIBLE_RISK_MAP_NAME,
+    colorbar_title=LATENT_MINIMUM_PLAUSIBLE_RISK_MAP_NAME,
 )
 
 SPECIES_USE_STYLE = MapStyle(
-    title="Species Use",
+    title=SPECIES_USE_MAP_NAME,
+    colorbar_title=SPECIES_USE_MAP_NAME,
     show_reference_map=False,
     min_display_value=0.0,
 )

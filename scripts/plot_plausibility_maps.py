@@ -14,9 +14,11 @@ MODEL_NAME = "bayesian_gmm"
 VALUE_COL = "plausibility"
 AGG = "non_zero_median"
 CONFIDENCE_THRESHOLD = 0.1
+PLAUSIBILITY_MAP_NAME = "Plausibility"
 
 PLAUSIBILITY_STYLE = MapStyle(
-    title="Plausibility",
+    title=PLAUSIBILITY_MAP_NAME,
+    colorbar_title=PLAUSIBILITY_MAP_NAME,
     cmap="viridis",
     color_quantile=0.99,
     show_reference_map=False,

@@ -17,8 +17,8 @@ MAP_SCRIPTS = [
     # "plot_bathymetry_map.py",
     # "plot_species_presence_maps.py",
     # "plot_fishing_activity_map.py",
-    # "plot_plausibility_maps.py",
-    "test_prediction_maps.py",
+    "plot_plausibility_maps.py",
+    "build_prediction_maps.py",
 ]
 
 
