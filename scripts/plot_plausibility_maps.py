@@ -89,7 +89,11 @@ def plot_plausibility_map(
         value_col=value_name,
         title=title,
         out_file=out_file,
-        style=MapStyle(cmap="viridis", color_quantile=0.99),
+        style=MapStyle(
+            cmap="viridis",
+            color_quantile=0.99,
+            show_reference_map=False,
+        ),
     )
 
 

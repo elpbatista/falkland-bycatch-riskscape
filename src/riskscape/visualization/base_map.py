@@ -27,7 +27,7 @@ COAST_COLOR = "darkgrey"
 GRID_COLOR = "darkgrey"
 INSET_LAND_COLOR = "#b8b8b8"
 INSET_FACE_COLOR = (1, 1, 1, 0.72)
-STUDY_AREA_COLOR = "#d62728"
+STUDY_AREA_COLOR = "#cfcfcf"
 STUDY_AREA_LINEWIDTH = 1.0
 COLORBAR_KWARGS = {
     "ticks": [],

@@ -58,6 +58,7 @@ def plot_species_presence_map(df: pd.DataFrame, species: str) -> Path:
             color_scale="log",
             color_quantile=0.999,
             alpha_scale=False,
+            show_reference_map=False,
         ),
     )
 

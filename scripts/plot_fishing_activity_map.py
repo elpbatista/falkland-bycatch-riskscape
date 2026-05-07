@@ -91,6 +91,7 @@ def plot_fishing_activity_map(
             color_quantile=None,
             color_scale="log",
             alpha_scale=False,
+            show_reference_map=False,
         ),
     )
 

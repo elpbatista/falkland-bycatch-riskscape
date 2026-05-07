@@ -23,7 +23,7 @@ from riskscape.model.train import MODEL_NAMES
 #   "single" -> run one model family selected by ACTIVE_MODEL_NAME
 #   "all"    -> run every model family listed in MODEL_NAMES
 #   "hybrid" -> combine one ML model and one Bayesian/GMM model
-PREDICTION_MODE = "all"
+PREDICTION_MODE = "hybrid"
 
 # Used only when PREDICTION_MODE = "single".
 # ACTIVE_MODEL_NAME options (must match MODEL_NAMES from train.py):
@@ -43,16 +43,23 @@ HYBRID_BAYESIAN_MODEL_NAME = "bayesian_gmm"
 #   "spatial_alpha" -> blend weight increases with historical cell support
 #   "conditional"   -> ML where historical support exists, Bayesian elsewhere
 #   "presence_gate" -> Bayesian/GMM likelihood gates ML intensity
-HYBRID_MODE = "constant"
+HYBRID_MODE = "presence_gate"
 
 HYBRID_ALPHA = 0.8
 HYBRID_MIN_ALPHA = 0.1
 HYBRID_MAX_ALPHA = 0.9
 HYBRID_SUPPORT_K = 5.0
 HYBRID_SUPPORT_THRESHOLD = 1.0
+# Maximum fraction cut from the Extra Trees species-use prediction
+# when Bayesian/GMM plausibility is zero.
+HYBRID_GATE_MAX_CUTS = {
+    "BBAL": 0.00,
+    "SAFS": 0.01,
+}
 
 BATCH_ROWS = 250_000
-PREDICTION_PRODUCTS = ["joint", "bbal", "safs"]
+# PREDICTION_PRODUCTS = ["joint", "bbal", "safs"]
+PREDICTION_PRODUCTS = ["joint"]
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 PREDICTION_ROOT = paths["data"] / "modeling" / "predictions"
@@ -302,6 +309,32 @@ def predict_species(
     return pred.astype("float32")
 
 
+def normalize_log_density(log_density: np.ndarray, model) -> np.ndarray:
+    """Normalize model log-density to plausibility range 0-1."""
+    denom = model.max_log_density - model.min_log_density
+
+    if denom <= 0:
+        return np.zeros_like(log_density, dtype="float32")
+
+    plausibility = (log_density - model.min_log_density) / denom
+    plausibility = np.clip(plausibility, 0.0, 1.0)
+
+    return plausibility.astype("float32")
+
+
+def predict_plausibility(
+    batch: pd.DataFrame,
+    payload: dict,
+) -> np.ndarray:
+    """Predict environmental plausibility from a density payload."""
+    validate_model_features(payload)
+
+    model = payload["model"]
+    log_density = model.predict_log_density(feature_matrix(batch))
+
+    return normalize_log_density(log_density, model)
+
+
 def predict_hybrid_species(
     batch: pd.DataFrame,
     ml_payload,
@@ -376,6 +409,38 @@ def blend_hybrid_predictions(
     return alpha.astype("float32"), pred.astype("float32")
 
 
+def presence_gate(
+    plausibility: np.ndarray,
+    species: pd.Series | np.ndarray,
+) -> np.ndarray:
+    """Return species-specific effective plausibility gate."""
+    species_values = pd.Series(species)
+    max_cut = (
+        species_values.map(HYBRID_GATE_MAX_CUTS)
+        .fillna(0.0)
+        .to_numpy(dtype="float32")
+    )
+    gate = 1.0 - max_cut * (1.0 - plausibility)
+
+    return gate.astype("float32")
+
+
+def apply_presence_gate(
+    species_use_log_pred: np.ndarray,
+    plausibility: np.ndarray,
+    species: pd.Series | np.ndarray,
+) -> np.ndarray:
+    """Gate log-space species-use predictions by plausibility."""
+    species_use = np.expm1(species_use_log_pred)
+    species_use = np.maximum(species_use, 0.0)
+
+    gate = presence_gate(plausibility, species)
+    hybrid_species_use = species_use * gate
+    hybrid_species_use_log = np.log1p(hybrid_species_use)
+
+    return hybrid_species_use_log.astype("float32")
+
+
 def build_species_predictions(
     batch: pd.DataFrame,
     species_payloads: dict[str, dict],
@@ -430,6 +495,49 @@ def build_product_predictions(
     return build_species_predictions(batch, {species: payload})
 
 
+def build_joint_plausibility(
+    batch: pd.DataFrame,
+    payload: dict,
+) -> pd.DataFrame:
+    """Predict plausibility for all species from one joint density payload."""
+    validate_model_features(payload)
+
+    encoder = payload["encoder"]
+    model = payload["model"]
+    frames = []
+
+    for species in encoder.categories_[0]:
+        out = batch.copy()
+        out["species"] = species
+
+        x_species = encoder.transform(out[["species"]])
+        x_features = feature_matrix(out).to_numpy()
+        x = np.hstack([x_species, x_features])
+
+        log_density = model.predict_log_density(x)
+        out["plausibility"] = normalize_log_density(log_density, model)
+        frames.append(out[["h3", "date", "species", "plausibility"]])
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_product_plausibility(
+    batch: pd.DataFrame,
+    product_name: str,
+    payload: dict,
+) -> pd.DataFrame:
+    """Predict plausibility for one product payload."""
+    if payload.get("model_type") == "joint_species":
+        return build_joint_plausibility(batch, payload)
+
+    species = payload.get("species", product_name.upper())
+    out = batch[["h3", "date"]].copy()
+    out["species"] = species
+    out["plausibility"] = predict_plausibility(batch, payload)
+
+    return out
+
+
 def add_support_by_species(
     df: pd.DataFrame,
     support_tables: dict[str, pd.DataFrame],
@@ -453,14 +561,37 @@ def build_hybrid_product_predictions(
 ) -> pd.DataFrame:
     """Predict one hybrid product payload pair."""
     ml_out = build_product_predictions(batch, product_name, ml_payload)
+
+    out = ml_out.rename(
+        columns={"species_use_log_pred": "species_use_ml_log_pred"}
+    )
+
+    if HYBRID_MODE == "presence_gate":
+        plausibility = build_product_plausibility(
+            batch,
+            product_name,
+            bayesian_payload,
+        )
+        out = out.merge(
+            plausibility,
+            on=["h3", "date", "species"],
+            how="inner",
+        )
+
+        plausibility_values = out["plausibility"].to_numpy(dtype="float32")
+        out["hybrid_alpha"] = presence_gate(plausibility_values, out["species"])
+        out["species_use_log_pred"] = apply_presence_gate(
+            out["species_use_ml_log_pred"].to_numpy(dtype="float32"),
+            plausibility_values,
+            out["species"],
+        )
+
+        return out
+
     bayesian_out = build_product_predictions(
         batch,
         product_name,
         bayesian_payload,
-    )
-
-    out = ml_out.rename(
-        columns={"species_use_log_pred": "species_use_ml_log_pred"}
     )
     bayesian_values = bayesian_out[
         ["h3", "date", "species", "species_use_log_pred"]
@@ -505,6 +636,21 @@ def build_hybrid_species_predictions(
         out = add_support_columns(out, support)
 
         bayesian_payload = bayesian_payloads[species]
+
+        if HYBRID_MODE == "presence_gate":
+            ml_pred = predict_species(out, ml_payload)
+            plausibility = predict_plausibility(out, bayesian_payload)
+
+            out["hybrid_alpha"] = plausibility
+            out["species_use_ml_log_pred"] = ml_pred
+            out["plausibility"] = plausibility
+            out["species_use_log_pred"] = apply_presence_gate(
+                ml_pred,
+                plausibility,
+            )
+            frames.append(out)
+            continue
+
         ml_pred, bayesian_pred = predict_hybrid_species(
             out,
             ml_payload,
@@ -527,17 +673,12 @@ def build_hybrid_species_predictions(
 
 
 def add_risk_columns(expanded: pd.DataFrame) -> pd.DataFrame:
-    has_fishing = expanded["fishing_activity"] > 0
-
     risk_log = (
         expanded["species_use_log_pred"]
         + expanded["fishing_activity_log"]
     )
 
-    expanded["risk_log_pred"] = risk_log.where(
-        has_fishing,
-        0.0,
-    ).astype("float32")
+    expanded["risk_log_pred"] = risk_log.astype("float32")
 
     return expanded
 
@@ -555,7 +696,10 @@ def output_columns(model_name: str) -> list[str]:
     if model_name == "hybrid":
         cols.insert(4, "hybrid_alpha")
         cols.insert(5, "species_use_ml_log_pred")
-        cols.insert(6, "species_use_bayesian_log_pred")
+        if HYBRID_MODE == "presence_gate":
+            cols.insert(6, "plausibility")
+        else:
+            cols.insert(6, "species_use_bayesian_log_pred")
 
     return cols
 

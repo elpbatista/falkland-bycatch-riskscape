@@ -82,4 +82,10 @@ The Bayesian/GMM model was not used as a direct residence-intensity predictor. I
 
 Likelihood-based models were evaluated differently,
 because their purpose was to estimate environmental
-support rather than directly predict residence intensity. 
+support rather than directly predict residence intensity.
+
+The likelihood-based model was used as an ecological support filter. It did not replace the machine-learning prediction; instead, it discounted predicted species use in environmental conditions weakly supported by observed tracking data.
+
+Which environmental combinations define plausible species-use conditions?  
+Extra Trees Importance: Which variables help prediction accuracy?  
+GMM/Bayesian plausibility: Which environmental states are characteristic of observed species presence?  
