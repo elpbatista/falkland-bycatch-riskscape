@@ -89,3 +89,16 @@ The likelihood-based model was used as an ecological support filter. It did not 
 Which environmental combinations define plausible species-use conditions?  
 Extra Trees Importance: Which variables help prediction accuracy?  
 GMM/Bayesian plausibility: Which environmental states are characteristic of observed species presence?  
+
+latent risk = predicted species use under a minimum fishing-effort unit
+
+if plausibility < threshold:
+    latent plausible risk = 0
+else:
+    latent plausible risk = latent risk
+
+The nuance is that low plausibility does not prove absence. It means:
+
+This prediction is outside, or weakly supported by, the environmental conditions represented in the plausibility model.
+
+we do not report latent risk there because the species-use prediction is environmentally unsupported under the plausibility threshold

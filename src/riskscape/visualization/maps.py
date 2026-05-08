@@ -494,6 +494,25 @@ def draw_prediction_layer(
     )
 
 
+def draw_uncertain_cell_outline(
+    ax,
+    gdf: gpd.GeoDataFrame,
+    outline_col: str,
+) -> None:
+    """Draw outlines around cells flagged as uncertain."""
+    outline_gdf = gdf[gdf[outline_col].fillna(False)].copy()
+
+    if outline_gdf.empty:
+        return
+
+    outline_gdf.plot(
+        ax=ax,
+        facecolor="none",
+        edgecolor="#1f1f1f",
+        linewidth=0.25,
+    )
+
+
 def draw_prediction_colorbar(
     ax,
     value_col: str,
@@ -613,7 +632,7 @@ def style_title(
     title: str | None,
     default: str,
 ) -> str:
-    """Return the plot title text before map metadata is appended."""
+    """Return the plot title text."""
     if title is not None:
         return title
 
@@ -623,12 +642,26 @@ def style_title(
     return default
 
 
+def titled_with_metadata(
+    style: MapStyle | None,
+    title: str | None,
+    default: str,
+    **metadata,
+) -> str:
+    """Return explicit style/title text, or append metadata to defaults."""
+    if title is not None or (style is not None and style.title is not None):
+        return style_title(style, title, default)
+
+    return map_title(default, **metadata)
+
+
 def plot_h3_map(
     gdf: gpd.GeoDataFrame,
     value_col: str,
     title: str,
     out_file: Path,
     style: MapStyle | None = None,
+    outline_col: str | None = None,
 ) -> Path:
     """Plot H3 map with bathymetry, land, and coastline."""
     style = style or MapStyle()
@@ -647,6 +680,8 @@ def plot_h3_map(
     norm = color_norm(plot_gdf[value_col].dropna(), style)
 
     draw_prediction_layer(ax, plot_gdf, value_col, norm, style)
+    if outline_col is not None:
+        draw_uncertain_cell_outline(ax, plot_gdf, outline_col)
     draw_prediction_colorbar(ax, value_col, norm, style)
     draw_map_context(
         ax,
@@ -745,7 +780,7 @@ def plot_hazard_plausibility_df_map(
     minimum_effort_unit: float = MINIMUM_EFFORT_UNIT,
     style: MapStyle | None = None,
 ) -> Path:
-    """Plot hazard with cells below the plausibility threshold set to zero."""
+    """Plot hazard, outlining cells below the plausibility threshold."""
     if species is None:
         raise ValueError("Plausible hazard maps require a species")
 
@@ -773,7 +808,7 @@ def plot_hazard_plausibility_df_map(
         grid.merge(hazard, on="h3", how="left")
         .merge(plausibility, on="h3", how="left")
     )
-    gdf.loc[gdf[plausibility_col].fillna(0.0) <= 0.0, "hazard_log_pred"] = 0.0
+    gdf["low_plausibility"] = gdf[plausibility_col].fillna(0.0) <= 0.0
 
     return plot_h3_map(
         gdf=gdf,
@@ -781,6 +816,7 @@ def plot_hazard_plausibility_df_map(
         title=title,
         out_file=out_file,
         style=style,
+        outline_col="low_plausibility",
     )
 
 
@@ -811,8 +847,10 @@ def plot_prediction_map(
         product_name=product_name,
     )
 
-    plot_title = map_title(
-        style_title(style, title, f"{legend_label(value_col)} ({agg_name})"),
+    plot_title = titled_with_metadata(
+        style,
+        title,
+        f"{legend_label(value_col)} ({agg_name})",
         year=year,
         species=species,
         month=month,
@@ -878,8 +916,10 @@ def plot_plausibility_map(
         product_name=product_name,
     )
 
-    plot_title = map_title(
-        style_title(style, title, f"{legend_label(value_col)} ({agg_name})"),
+    plot_title = titled_with_metadata(
+        style,
+        title,
+        f"{legend_label(value_col)} ({agg_name})",
         year=year,
         species=species,
         model_name=model_name,
@@ -927,13 +967,11 @@ def plot_hazard_map(
         product_name=product_name,
     )
 
-    plot_title = map_title(
-        style_title(
-            style,
-            title,
-            f"Hazard ({agg_name} species use + "
-            f"{minimum_effort_unit:g} effort unit)",
-        ),
+    plot_title = titled_with_metadata(
+        style,
+        title,
+        f"Hazard ({agg_name} species use + "
+        f"{minimum_effort_unit:g} effort unit)",
         year=year,
         species=species,
         month=month,
@@ -974,7 +1012,7 @@ def plot_hazard_plausibility_map(
     title: str | None = None,
     style: MapStyle | None = None,
 ) -> Path:
-    """Plot hazard, setting cells below the plausibility threshold to zero."""
+    """Plot hazard, outlining cells below the plausibility threshold."""
     predictions = load_predictions(
         year=year,
         model_name=model_name,
@@ -999,8 +1037,10 @@ def plot_hazard_plausibility_map(
         product_name=product_name,
     )
 
-    plot_title = map_title(
-        style_title(style, title, "Latent Minimum Plausible Risk"),
+    plot_title = titled_with_metadata(
+        style,
+        title,
+        "Latent Minimum Plausible Risk",
         year=year,
         species=species,
         month=month,

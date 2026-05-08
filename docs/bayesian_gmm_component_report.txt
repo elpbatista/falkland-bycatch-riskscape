@@ -1,0 +1,68 @@
+Bayesian GMM Component Report
+================================
+
+Model
+-----
+Model: joint Bayesian GMM species-use model
+Components: 10
+Component IDs: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+How to read this report
+-----------------------
+Each component is an environmental regime learned by the joint Bayesian GMM.
+The model was trained with species as a one-hot input, so some components are
+species-specific and others are shared or transitional. Values close to 1 in
+species_BBAL or species_SAFS indicate which species dominates the component.
+Tiny negative values such as -0.0000 are numerical noise and should be read as zero.
+
+The assignment summary is based on actual component assignments for 2022.
+It reports coverage and assignment confidence, not mean latitude/longitude or
+mean/median DOY. A mean coordinate over a large H3 region and a mean seasonal
+day are not meaningful summaries for these components.
+
+Model component parameters
+--------------------------
+Component 4: weight=0.194, BBAL-dominated, species_BBAL=1.000, species_SAFS=-0.000, sst=283.49, wind_speed=6.05, chl_log=0.87, depth_m=139.4, dist_coast_m=132195
+Component 5: weight=0.155, BBAL-dominated, species_BBAL=1.000, species_SAFS=0.000, sst=281.85, wind_speed=6.92, chl_log=0.90, depth_m=198.3, dist_coast_m=74036
+Component 1: weight=0.123, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=282.46, wind_speed=7.91, chl_log=0.77, depth_m=306.1, dist_coast_m=69550
+Component 6: weight=0.095, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=281.95, wind_speed=7.83, chl_log=0.30, depth_m=1899.3, dist_coast_m=264842
+Component 3: weight=0.088, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=283.12, wind_speed=7.41, chl_log=0.64, depth_m=226.7, dist_coast_m=64128
+Component 7: weight=0.082, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=281.26, wind_speed=5.93, chl_log=0.96, depth_m=194.6, dist_coast_m=119755
+Component 0: weight=0.080, BBAL-dominated, species_BBAL=0.928, species_SAFS=0.072, sst=285.11, wind_speed=3.71, chl_log=1.26, depth_m=195.8, dist_coast_m=270987
+Component 2: weight=0.078, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=283.66, wind_speed=7.32, chl_log=0.45, depth_m=5554.8, dist_coast_m=505363
+Component 9: weight=0.053, SAFS-dominated, species_BBAL=-0.000, species_SAFS=1.000, sst=282.51, wind_speed=6.97, chl_log=0.41, depth_m=2102.7, dist_coast_m=385601
+Component 8: weight=0.053, mixed species, species_BBAL=0.285, species_SAFS=0.715, sst=282.87, wind_speed=7.13, chl_log=0.69, depth_m=612.5, dist_coast_m=301358
+
+2022 assigned component patterns
+--------------------------------
+
+BBAL
+----
+Component 8: 87.6% of assigned BBAL rows (11,293,595 rows), mixed species; 36,349 H3 cells, 365 dates, 365 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=1.000, mean entropy=0.000
+Component 5: 9.0% of assigned BBAL rows (1,155,215 rows), BBAL-dominated; 14,524 H3 cells, 143 dates, 143 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.999, mean entropy=0.001
+Component 4: 2.5% of assigned BBAL rows (324,062 rows), BBAL-dominated; 9,279 H3 cells, 105 dates, 105 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.997, mean entropy=0.003
+Component 0: 0.9% of assigned BBAL rows (115,831 rows), BBAL-dominated; 3,117 H3 cells, 88 dates, 88 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.995, mean entropy=0.006
+
+SAFS
+----
+Component 1: 51.8% of assigned SAFS rows (6,674,881 rows), SAFS-dominated; 36,345 H3 cells, 365 dates, 365 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.998, mean entropy=0.002
+Component 6: 32.2% of assigned SAFS rows (4,153,687 rows), SAFS-dominated; 32,884 H3 cells, 365 dates, 365 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.998, mean entropy=0.002
+Component 9: 6.6% of assigned SAFS rows (856,197 rows), SAFS-dominated; 9,273 H3 cells, 202 dates, 202 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.996, mean entropy=0.004
+Component 3: 3.1% of assigned SAFS rows (396,632 rows), SAFS-dominated; 9,659 H3 cells, 83 dates, 83 adjusted DOY values, adjusted DOY span=20-102, mean assignment probability=0.990, mean entropy=0.010
+Component 7: 2.3% of assigned SAFS rows (300,043 rows), SAFS-dominated; 8,977 H3 cells, 67 dates, 67 adjusted DOY values, adjusted DOY span=275-341, mean assignment probability=0.993, mean entropy=0.007
+Component 8: 2.0% of assigned SAFS rows (260,867 rows), mixed species; 4,917 H3 cells, 148 dates, 148 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.986, mean entropy=0.015
+Component 2: 1.6% of assigned SAFS rows (212,516 rows), SAFS-dominated; 4,146 H3 cells, 83 dates, 83 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.996, mean entropy=0.004
+Component 0: 0.3% of assigned SAFS rows (33,880 rows), BBAL-dominated; 3,352 H3 cells, 53 dates, 53 adjusted DOY values, adjusted DOY span=1-365, mean assignment probability=0.996, mean entropy=0.004
+
+Main interpretation
+-------------------
+Component assignments summarize model regimes, not direct biological
+habitat classes. Species-dominated components indicate regimes where
+the joint model strongly separated the species-conditioned feature space.
+Mixed components indicate environmental regimes shared across species or
+not cleanly separated by species identity.
+
+Source files
+------------
+/Users/pb/Work/OSU/CapstoneProject/bycatch-riskscape/data/modeling/metrics/bayesian_gmm_joint_gmm_components.csv
+/Users/pb/Work/OSU/CapstoneProject/bycatch-riskscape/data/modeling/metrics/bayesian_gmm_joint_component_assignments_2022.csv
