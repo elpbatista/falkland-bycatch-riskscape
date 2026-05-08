@@ -482,20 +482,9 @@ def train_models() -> None:
     df = prepare_species_table()
     df = sample_training_rows(df)
 
-    species_values = sorted(df["species"].dropna().unique().tolist())
-
     rows = []
 
     for model_name in MODEL_NAMES:
         rows.append(train_joint_species_model(df, model_name))
-
-        for species_name in species_values:
-            rows.append(
-                train_single_species_model(
-                    species_name=species_name,
-                    df=df,
-                    model_name=model_name,
-                )
-            )
 
     save_metrics(rows)

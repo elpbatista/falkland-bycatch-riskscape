@@ -221,6 +221,36 @@ def species_list() -> list[str]:
     return sorted(values)
 
 
+def build_feature_cube(
+    year: int,
+    species_values: list[str] | None = None,
+    feature_cols: list[str] | None = None,
+) -> pd.DataFrame:
+    """Build h3/date/species feature cube for one year."""
+    features = load_feature_grid(year)
+
+    if features.empty:
+        return pd.DataFrame()
+
+    feature_cols = list(FEATURES if feature_cols is None else feature_cols)
+    species_values = species_list() if species_values is None else species_values
+
+    validate_columns(features, ["h3", "date"] + feature_cols, "feature_grid")
+
+    species = pd.DataFrame({"species": list(species_values)})
+    if species.empty:
+        return pd.DataFrame(
+            columns=["h3", "date", "species"] + feature_cols
+        )
+
+    out = features[["h3", "date"] + feature_cols].merge(
+        species,
+        how="cross",
+    )
+
+    return out[["h3", "date", "species"] + feature_cols]
+
+
 def build_species_training(static: pd.DataFrame) -> None:
     """Build species-use training table."""
     for year in available_years("species_presence"):
@@ -348,20 +378,30 @@ def build_fishing_training(_static: pd.DataFrame) -> None:
 
 def build_prediction_grid(static: pd.DataFrame) -> None:
     """Build prediction grid by year."""
-    species = pd.DataFrame({"species": species_list()})
+    species_values = species_list()
 
     for year in available_years("environmental"):
-        df = load_feature_grid(year)
+        df = build_feature_cube(year, species_values=species_values)
 
         if df.empty:
             continue
 
-        df = df.merge(species, how="cross")
-
-        keep = ["h3", "date", "species"] + FEATURES
-        df = df[keep]
-
         path = save_partition(df, "prediction_grid", year)
+        print(f"Saved: {path}")
+        print(f"Rows: {len(df)}")
+
+
+def build_feature_cube_partitions(_static: pd.DataFrame) -> None:
+    """Build species-expanded feature cube partitions by year."""
+    species_values = species_list()
+
+    for year in available_years("environmental"):
+        df = build_feature_cube(year, species_values=species_values)
+
+        if df.empty:
+            continue
+
+        path = save_partition(df, "feature_cube", year)
         print(f"Saved: {path}")
         print(f"Rows: {len(df)}")
 
@@ -370,7 +410,8 @@ def build_model_datasets() -> None:
     """Build all model-ready datasets."""
     static = load_static()
 
-    # build_feature_grid(static)
+    # Feature cubes are intentionally not materialized; reuse feature_grid and
+    # expand species in memory with build_feature_cube when needed.
     # build_species_training(static)
     # build_prediction_grid(static)
-    build_fishing_training(static)
+    # build_fishing_training(static)

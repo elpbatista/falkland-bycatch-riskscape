@@ -169,12 +169,6 @@ def main() -> int:
     species_values = species_list()
 
     joint_payload = load_payload(MODEL_DIR / "species_model_joint.joblib")
-    species_payloads = {
-        species: load_payload(
-            MODEL_DIR / f"species_model_{species.lower()}.joblib"
-        )
-        for species in species_values
-    }
 
     for year in available_years("environmental"):
         base = load_feature_grid(year)
@@ -186,12 +180,6 @@ def main() -> int:
         base = drop_invalid_feature_rows(base, year)
 
         products = {"joint": joint_payload}
-        products.update(
-            {
-                species.lower(): payload
-                for species, payload in species_payloads.items()
-            }
-        )
 
         for product, payload in products.items():
             out = calculate_product_year(

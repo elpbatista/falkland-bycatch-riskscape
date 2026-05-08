@@ -28,8 +28,6 @@ PLAUSIBILITY_STYLE = MapStyle(
 def main() -> int:
     """Run plausibility map plots."""
     plot_products = [
-        ("bbal", "BBAL"),
-        ("safs", "SAFS"),
         ("joint", "BBAL"),
         ("joint", "SAFS"),
     ]

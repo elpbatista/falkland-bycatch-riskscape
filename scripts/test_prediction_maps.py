@@ -63,8 +63,6 @@ def main() -> int:
     ]
 
     prediction_products = [
-        ("bbal", "BBAL"),
-        ("safs", "SAFS"),
         ("joint", "BBAL"),
         ("joint", "SAFS"),
     ]
