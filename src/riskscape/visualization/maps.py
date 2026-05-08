@@ -708,7 +708,7 @@ def plot_prediction_df_map(
     df: pd.DataFrame,
     value_col: str,
     out_file: Path,
-    title: str,
+    title: str | None,
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
@@ -739,7 +739,7 @@ def plot_prediction_df_map(
 def plot_hazard_df_map(
     df: pd.DataFrame,
     out_file: Path,
-    title: str,
+    title: str | None,
     species: str | None = None,
     month: int | None = None,
     agg: str = "mean",
@@ -770,7 +770,7 @@ def plot_hazard_df_map(
 def plot_hazard_plausibility_df_map(
     predictions: pd.DataFrame,
     out_file: Path,
-    title: str,
+    title: str | None,
     plausibility_df: pd.DataFrame | None = None,
     species: str | None = None,
     month: int | None = None,
