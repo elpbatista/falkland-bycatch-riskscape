@@ -27,7 +27,7 @@ MODEL_NAMES = [
     "hist_gradient_boosting",
     "random_forest",
     "extra_trees",
-    "gmm",
+    # "gmm",
     "bayesian_gmm",
 ]
 
@@ -37,7 +37,7 @@ MAX_POSITIVE_ROWS = None
 MODEL_DIR = paths["data"] / "modeling" / "models"
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
 
-GMM_COMPONENTS = 6
+GMM_COMPONENTS = 10
 GMM_REG_COVAR = 1e-6
 
 
