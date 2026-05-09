@@ -54,7 +54,7 @@ HYBRID_SUPPORT_THRESHOLD = 1.0
 # when Bayesian/GMM plausibility is zero.
 HYBRID_GATE_MAX_CUTS = {
     "BBAL": 0.1,
-    "SAFS": 0.5,
+    "SAFS": 0.1,
 }
 
 BATCH_ROWS = 250_000
@@ -546,7 +546,7 @@ def add_support_by_species(
     frames = []
 
     for species, group in df.groupby("species", sort=False):
-        support = support_tables.get(species)
+        support = support_tables.get(str(species))
         frames.append(add_support_columns(group, support))
 
     return pd.concat(frames, ignore_index=True)
@@ -647,6 +647,7 @@ def build_hybrid_species_predictions(
             out["species_use_log_pred"] = apply_presence_gate(
                 ml_pred,
                 plausibility,
+                out["species"],
             )
             frames.append(out)
             continue
@@ -868,8 +869,14 @@ def predict_year(
         batch["fishing_activity_log"] = fishing_log
 
         if model_name == "hybrid":
-            if support_tables is None:
-                raise ValueError("Hybrid prediction requires support tables")
+            if (
+                ml_payloads is None
+                or bayesian_payloads is None
+                or support_tables is None
+            ):
+                raise ValueError(
+                    "Hybrid prediction requires ML, Bayesian, and support payloads"
+                )
 
             expanded = build_hybrid_species_predictions(
                 batch,
@@ -878,6 +885,9 @@ def predict_year(
                 support_tables,
             )
         else:
+            if species_payloads is None:
+                raise ValueError("Species prediction requires species payloads")
+
             expanded = build_species_predictions(batch, species_payloads)
 
         expanded = add_risk_columns(expanded)
