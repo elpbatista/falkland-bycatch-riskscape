@@ -13,15 +13,19 @@ YEAR = 2022
 MODEL_NAME = "bayesian_gmm"
 VALUE_COL = "plausibility"
 AGG = "non_zero_median"
-CONFIDENCE_THRESHOLD = 0.1
-PLAUSIBILITY_MAP_NAME = "Plausibility"
+CONFIDENCE_THRESHOLD = None
+PLAUSIBILITY_MAP_NAME = "Non-zero median plausibility"
 
 PLAUSIBILITY_STYLE = MapStyle(
-    title=PLAUSIBILITY_MAP_NAME,
+    title=None,
     colorbar_title=PLAUSIBILITY_MAP_NAME,
     cmap="viridis",
-    color_quantile=0.99,
+    color_min=0.0,
+    color_max=1.0,
+    color_quantile=None,
     show_reference_map=False,
+    colorbar_bottom_label="0",
+    colorbar_top_label="1",
 )
 
 
@@ -48,6 +52,7 @@ def main() -> int:
             value_col=VALUE_COL,
             agg=AGG,
             confidence_threshold=CONFIDENCE_THRESHOLD,
+            title=f"Non-Zero Median Environmental Plausibility — {species} — {YEAR}",
             style=PLAUSIBILITY_STYLE,
         )
         print(f"Saved: {out_file}")
