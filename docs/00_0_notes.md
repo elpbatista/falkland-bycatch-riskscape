@@ -237,3 +237,61 @@ Additional diagnostic plots were produced to compare predicted and observed spec
 Environmental plausibility was evaluated separately from direct species-use prediction. The Bayesian/Gaussian mixture model was used to identify `H3`/`date`/`species` combinations whose environmental conditions were similar to those associated with observed telemetry locations. Plausibility values were therefore interpreted as environmental support diagnostics rather than as direct validation of species presence or absence. Risk maps were interpreted alongside plausibility maps to distinguish well-supported predictions from areas of environmental extrapolation.
 
 Several additional validation steps were not implemented in the current workflow but would strengthen future versions of the analysis. First, spatial or spatiotemporal block cross-validation should be used to test whether models generalize to withheld regions or time periods, rather than only to randomly withheld rows. Second, telemetry tracks could be split by individual, trip, colony, or year to evaluate transferability across animals and sampling periods. Third, sensitivity analysis should be conducted for the plausibility-gate parameter to quantify how risk maps change under different levels of environmental-support filtering. Fourth, predicted risk surfaces should be compared with independent bycatch, observer, or fisheries interaction records when such data become available. Finally, uncertainty should be summarized across model classes, plausibility thresholds, and aggregation choices to identify areas where risk estimates are robust versus areas where conclusions depend strongly on modeling assumptions.
+
+---
+
+## Data Summary
+
+The final study grid contained 37,209 H3 resolution 6 cells covering the Falkland Islands fisheries grid plus a 50 km buffer. Across the 2014-2023 analysis period, this produced 3,652 daily time steps and 135,887,268 H3 cell-day records in the environmental feature grid. The environmental table contained no duplicate `h3`/`date` keys and provided daily values for sea surface temperature, sea surface height, wind speed, log-transformed chlorophyll-a, seasonal terms, spatial gradients, and temporal anomalies.
+
+The raw Global Fishing Watch dataset contained 2,297,069 fishing activity records from 2,011 unique vessels, representing 3,094,974.5 fishing hours between 2014 and 2023. After spatial aggregation to the H3 study grid, the processed fishing-effort table contained 849,818 active `h3`/`date` records across 17,218 H3 cells and all 3,652 dates in the analysis period. These processed records retained 3,086,036.2 fishing hours and were expanded by adding 0 values to the cells without fishing observations into the full 135,887,268-row modeling table so that fishing exposure could be represented for every cell-day.
+
+The cleaned SAERI telemetry dataset contained 59,182 valid records from 42 tracked individuals and 76 trips during 2022-2023. Black-browed albatrosses (BBAL) accounted for 33,425 raw telemetry records from 27 individuals and 58 trips, while South American fur seals (SAFS) accounted for 25,757 records from 15 individuals and 18 trips. After aggregation within the H3 study grid, the species-presence feature table contained 10,268 `h3`/`date`/`species` records across 6,763 H3 cells and 146 observed dates, with 40,824 total telemetry detections retained as H3-level presence counts.
+
+Processed species observations were concentrated in 2022 for BBAL and spanned 2022-2023 for SAFS. BBAL contributed 4,552 `h3`/`date`/`species` rows across 3,270 H3 cells and 16 dates, with 21,329 aggregated presence counts. SAFS contributed 5,716 `h3`/`date`/`species` rows across 4,024 H3 cells and 146 dates, with 19,495 aggregated presence counts.
+
+The resulting modeling products were substantially larger than the raw biological observations because the workflow evaluated species use and risk across the full study grid. The species-training table contained 6,027,858 rows for observed species-date combinations, and the final joint plausibility, prediction, and cube-component tables each contained 257,916,862 species-cell-day records across 2014-2023.
+
+---
+
+## Environmental Feature Generation
+
+### Environmental Coverage and Completeness
+
+The environmental feature-generation workflow produced a continuous daily feature grid for all 37,209 H3 cells across the full 2014-2023 analysis period. The resulting environmental table contained 135,887,268 H3 cell-day records, with one record for each cell on each of 3,652 dates. No duplicate `h3`/`date` keys were present.
+
+Coverage was highest for sea surface temperature, which was complete across the full grid. Sea surface height was available for 99.5% of cell-days, wind speed for 98.4%, and log-transformed chlorophyll-a for 96.6%. Static spatial predictors were complete for all H3 cells, including bathymetric depth, slope, distance to coast, and trigonometric encodings of latitude and longitude.
+
+Across the full environmental grid, sea surface temperature ranged from 271.4 to 293.5 K, with a median of 279.6 K. Sea surface height ranged from -1.32 to 1.25 m, with a median of 0.16 m. Wind speed had a median of 8.1 m/s and a 95th percentile of 13.3 m/s. Log-transformed chlorophyll-a was right-skewed, with a median of 0.22 and a 95th percentile of 0.95.
+
+<!-- Suggested figure: Example environmental layers for a representative date showing SST, SSH, CHL, and wind speed aggregated to the H3 grid. -->
+
+### Derived Environmental Features
+
+The final feature grid expanded the raw environmental inputs into a richer spatiotemporal representation. For each H3 cell-day, the workflow produced base oceanographic variables, cyclic seasonal predictors, static spatial predictors, local spatial gradients, and temporal anomaly fields. The modeling feature grid therefore represented not only the environmental state at a location, but also its seasonal timing, coastal and bathymetric context, local spatial contrast, and departure from expected seasonal conditions.
+
+Static features described broad spatial structure within the study area. Bathymetric depth ranged from shallow shelf and coastal cells to deep offshore waters, with a median depth of 1,581.7 m and a maximum depth of 6,261.6 m. Distance to coast ranged from 14 m to 789.5 km, with a median of 296.3 km. These static features provided persistent spatial context alongside the daily oceanographic variables.
+
+The correlation structure among base environmental predictors showed moderate relationships among SST, chlorophyll-a, and SSH, while wind speed was more weakly correlated with the other variables. SST was moderately correlated with chlorophyll-a and SSH, with correlations of 0.57 and 0.49, respectively. Chlorophyll-a and SSH were also moderately correlated at 0.56. Wind speed had weak negative correlations with SST, chlorophyll-a, and SSH, ranging from -0.15 to -0.10.
+
+<!-- Suggested figure: Correlation heatmap of environmental predictors. -->
+
+### Spatial Gradients and Front-Like Structure
+
+Spatial gradient features captured local environmental heterogeneity across neighboring H3 cells. These fields were generally sparse and right-skewed, indicating that most cell-days had relatively smooth local conditions while a smaller fraction contained stronger spatial contrasts. SST gradients had a median value of 0.080 K and a 95th percentile of 0.282 K. SSH gradients had a median value of 0.0087 m and a 95th percentile of 0.0382 m. Log-chlorophyll gradients had a median value of 0.0091 and a 95th percentile of 0.0967.
+
+The gradient layers added information distinct from the base environmental values. Rather than describing whether a cell was warm, productive, or elevated in sea surface height, these layers identified locations of local spatial transitions and front-like structure. The environmental feature space therefore included both large-scale oceanographic state variables and local spatial heterogeneity.
+
+<!-- Suggested figure: Example gradient layers for SST, SSH, and log-CHL highlighting frontal structure and shelf transitions. -->
+
+### Seasonal and Anomaly Features
+
+Seasonal structure was represented for every H3 cell-day using cyclic day-of-year terms. The sine and cosine seasonal predictors covered their expected range from -1 to 1 and remained balanced across the 10-year record, confirming that the feature grid preserved continuous annual seasonality rather than treating calendar time as a linear variable.
+
+Anomaly features were centered close to zero across the full period, as expected for variables expressed relative to local seasonal conditions. SST anomalies had a standard deviation of 0.85 K and ranged from -6.00 to 7.00 K. SSH anomalies had a standard deviation of 0.11 m, while wind-speed anomalies had a standard deviation of 2.95 m/s. Log-chlorophyll anomalies had a standard deviation of 0.19, with a right-skewed upper tail indicating occasional positive departures from expected seasonal productivity.
+
+Yearly mean anomalies showed that the feature space retained interannual variability after seasonal adjustment. Mean SST anomalies were negative in 2014-2016 and 2019, but positive in 2017-2018 and 2020-2023, with the largest positive yearly mean in 2020. Wind-speed anomalies also varied by year, ranging from negative mean conditions in 2021 and 2022 to positive mean conditions in 2015 and 2023. These results indicate that the generated environmental representation preserved daily, seasonal, spatial, and interannual structure for downstream species-use and risk modeling.
+
+<!-- Suggested figure: Time series of yearly mean SST and wind-speed anomalies across the study area. -->
+
+<!-- Suggested figure: Distribution plots or histograms of anomaly variables showing centered seasonal departures. -->

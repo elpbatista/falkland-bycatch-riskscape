@@ -55,6 +55,8 @@ class MapStyle:
     colorbar_labels: tuple[str, ...] | None = None
     colorbar_boundaries: tuple[float, ...] | None = None
     colorbar_quantiles: tuple[float, ...] | None = None
+    colorbar_bottom_label: str = "Low"
+    colorbar_top_label: str = "High"
 
 
 def prediction_path(
@@ -529,6 +531,8 @@ def draw_prediction_colorbar(
         cmap=style.cmap,
         norm=norm,
         label=colorbar_title(style, value_col),
+        bottom_label=style.colorbar_bottom_label,
+        top_label=style.colorbar_top_label,
     )
 
 

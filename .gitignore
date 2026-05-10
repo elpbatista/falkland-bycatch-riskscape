@@ -52,6 +52,8 @@ data/
 *.zip
 logs/
 */dev/
+plots/*.csv
+plots/**/*.csv
 
 # Keep
 !src/
