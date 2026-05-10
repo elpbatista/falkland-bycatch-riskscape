@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import joblib
@@ -23,6 +24,7 @@ MODEL_PATH = (
 OUT_ROOT = modeling_root("cube_components")
 
 BATCH_ROWS = 250_000
+LOG_2PI = np.log(2.0 * np.pi)
 
 
 def model_features(payload: dict) -> list[str]:
@@ -124,22 +126,6 @@ def drop_invalid_feature_rows(
     return out.loc[~mask].reset_index(drop=True)
 
 
-def build_joint_matrix(
-    batch: pd.DataFrame,
-    payload: dict,
-) -> np.ndarray:
-    """Build joint-species feature matrix."""
-    encoder = payload["encoder"]
-
-    x_species = encoder.transform(
-        batch[["species"]]
-    )
-
-    x_features = feature_matrix(batch, payload).to_numpy()
-
-    return np.hstack([x_species, x_features])
-
-
 def add_species_rows(
     batch: pd.DataFrame,
     payload: dict,
@@ -169,20 +155,94 @@ def component_entropy(proba: np.ndarray) -> np.ndarray:
     return (entropy / max_entropy).astype("float32")
 
 
+def feature_offset(payload: dict) -> int:
+    """Return the number of species-encoder columns in the fitted joint model."""
+    encoder = payload["encoder"]
+
+    return int(sum(len(categories) for categories in encoder.categories_))
+
+
+def scaled_feature_matrix(
+    batch: pd.DataFrame,
+    payload: dict,
+) -> np.ndarray:
+    """Return environmental features scaled with the fitted joint-model scaler."""
+    model = payload["model"]
+    offset = feature_offset(payload)
+    x = feature_matrix(batch, payload).to_numpy(dtype="float64")
+    mean = model.scaler.mean_[offset:]
+    scale = model.scaler.scale_[offset:]
+
+    return (x - mean) / scale
+
+
+def component_log_probability(
+    x_scaled: np.ndarray,
+    mean: np.ndarray,
+    covariance: np.ndarray,
+) -> np.ndarray:
+    """Return multivariate Gaussian log probability for one component."""
+    jitter = 1e-6
+    covariance = covariance.copy()
+
+    for _ in range(5):
+        try:
+            chol = np.linalg.cholesky(covariance)
+            break
+        except np.linalg.LinAlgError:
+            covariance += np.eye(covariance.shape[0]) * jitter
+            jitter *= 10.0
+    else:
+        chol = np.linalg.cholesky(
+            covariance + np.eye(covariance.shape[0]) * jitter
+        )
+
+    centered = (x_scaled - mean).T
+    solved = np.linalg.solve(chol, centered)
+    quadratic = np.sum(solved * solved, axis=0)
+    log_det = 2.0 * np.sum(np.log(np.diag(chol)))
+    n_features = x_scaled.shape[1]
+
+    return -0.5 * (n_features * LOG_2PI + log_det + quadratic)
+
+
+def environmental_component_probabilities(
+    batch: pd.DataFrame,
+    payload: dict,
+) -> np.ndarray:
+    """Return component probabilities from environmental feature values only."""
+    model = payload["model"]
+    offset = feature_offset(payload)
+    x_scaled = scaled_feature_matrix(batch, payload)
+    means = model.gmm.means_[:, offset:]
+    covariances = model.gmm.covariances_[:, offset:, offset:]
+    log_weights = np.log(model.gmm.weights_)
+    log_probs = np.empty((len(batch), model.gmm.n_components), dtype="float64")
+
+    for component in range(model.gmm.n_components):
+        log_probs[:, component] = (
+            log_weights[component]
+            + component_log_probability(
+                x_scaled,
+                means[component],
+                covariances[component],
+            )
+        )
+
+    max_log = log_probs.max(axis=1, keepdims=True)
+    shifted = np.exp(log_probs - max_log)
+
+    return shifted / shifted.sum(axis=1, keepdims=True)
+
+
 def process_batch(
     batch: pd.DataFrame,
     payload: dict,
 ) -> pd.DataFrame:
-    """Assign dominant ecological component."""
-    model = payload["model"]
+    """Assign dominant ecological component from environmental features."""
+    proba = environmental_component_probabilities(batch, payload)
 
-    x = build_joint_matrix(batch, payload)
-
-    x_scaled = model.scaler.transform(x)
-
-    component = model.gmm.predict(x_scaled)
-
-    proba = model.gmm.predict_proba(x_scaled)
+    component = proba.argmax(axis=1)
 
     dominant_probability = proba.max(axis=1)
 
@@ -257,11 +317,28 @@ def assign_year(payload: dict, year: int) -> Path:
     return out_path
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Assign Bayesian/GMM components from environmental features.",
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        action="append",
+        help="Year to process. Can be provided more than once. Defaults to all years.",
+    )
+
+    return parser.parse_args()
+
+
 def main() -> int:
     """Run component assignment."""
+    args = parse_args()
     payload = joblib.load(MODEL_PATH)
+    years = args.year if args.year else component_years()
 
-    for year in component_years():
+    for year in years:
         print()
         print(f"=== Assigning components for {year} ===")
         assign_year(payload, year)
