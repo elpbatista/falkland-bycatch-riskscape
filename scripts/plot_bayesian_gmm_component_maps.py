@@ -1,4 +1,4 @@
-"""Plot dominant Bayesian/GMM component assignments by species."""
+"""Plot dominant Bayesian/GMM environmental component assignments."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ matplotlib.use("Agg")
 from matplotlib.axes import Axes
 from matplotlib import colors
 from matplotlib.cm import ScalarMappable
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import pandas as pd
 from typing import Any, cast
@@ -33,7 +32,6 @@ from riskscape.visualization.base_map import (
 YEAR = 2022
 MODEL_NAME = "bayesian_gmm"
 PRODUCT_NAME = "joint"
-SPECIES = ["BBAL", "SAFS"]
 INPUT_ROOT = paths["data"] / "modeling" / "cube_components"
 OUTPUT_ROOT = paths["plots"] / "plausibility"
 DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "plausibility"
@@ -88,7 +86,7 @@ def dominant_components(
     model_name: str,
     product_name: str,
 ) -> pd.DataFrame:
-    """Return dominant component per H3 cell/species from environmental features."""
+    """Return dominant component per H3 cell from environmental features."""
     _ = (model_name, product_name)
     component_file = component_path(year)
 
@@ -98,28 +96,35 @@ def dominant_components(
         )
 
     query = """
-        WITH counts AS (
-            SELECT
-                species,
+        WITH environmental_rows AS (
+            SELECT DISTINCT
                 CAST(h3 AS UBIGINT) AS h3,
+                date,
+                component,
+                component_probability,
+                component_entropy
+            FROM read_parquet(?)
+        ),
+        counts AS (
+            SELECT
+                h3,
                 component,
                 count(*) AS component_days,
                 avg(component_probability) AS mean_component_probability,
                 avg(component_entropy) AS mean_component_entropy
-            FROM read_parquet(?)
-            GROUP BY species, h3, component
+            FROM environmental_rows
+            GROUP BY h3, component
         ),
         ranked AS (
             SELECT
                 *,
                 row_number() OVER (
-                    PARTITION BY species, h3
+                    PARTITION BY h3
                     ORDER BY component_days DESC, mean_component_probability DESC, component
                 ) AS rank
             FROM counts
         )
         SELECT
-            species,
             h3,
             CAST(component AS INTEGER) AS dominant_component,
             component_days,
@@ -127,7 +132,7 @@ def dominant_components(
             mean_component_entropy
         FROM ranked
         WHERE rank = 1
-        ORDER BY species, h3
+        ORDER BY h3
     """
 
     with duckdb.connect(database=":memory:") as con:
@@ -142,7 +147,7 @@ def monthly_dominant_components(
     model_name: str,
     product_name: str,
 ) -> pd.DataFrame:
-    """Return dominant component by month/H3/species from environmental features."""
+    """Return dominant component by month/H3 from environmental features."""
     _ = (model_name, product_name)
     component_file = component_path(year)
 
@@ -152,29 +157,36 @@ def monthly_dominant_components(
         )
 
     query = """
-        WITH counts AS (
-            SELECT
-                species,
+        WITH environmental_rows AS (
+            SELECT DISTINCT
                 CAST(h3 AS UBIGINT) AS h3,
+                date,
+                component,
+                component_probability,
+                component_entropy
+            FROM read_parquet(?)
+        ),
+        counts AS (
+            SELECT
+                h3,
                 CAST(month(date) AS INTEGER) AS month,
                 component,
                 count(*) AS component_days,
                 avg(component_probability) AS mean_component_probability,
                 avg(component_entropy) AS mean_component_entropy
-            FROM read_parquet(?)
-            GROUP BY species, h3, month, component
+            FROM environmental_rows
+            GROUP BY h3, month, component
         ),
         ranked AS (
             SELECT
                 *,
                 row_number() OVER (
-                    PARTITION BY species, h3, month
+                    PARTITION BY h3, month
                     ORDER BY component_days DESC, mean_component_probability DESC, component
                 ) AS rank
             FROM counts
         )
         SELECT
-            species,
             h3,
             month,
             CAST(component AS INTEGER) AS dominant_component,
@@ -183,7 +195,7 @@ def monthly_dominant_components(
             mean_component_entropy
         FROM ranked
         WHERE rank = 1
-        ORDER BY species, month, h3
+        ORDER BY month, h3
     """
 
     with duckdb.connect(database=":memory:") as con:
@@ -198,24 +210,22 @@ def month_panel_title(month: int) -> str:
     return calendar.month_abbr[month]
 
 
-def plot_species_panel(
+def plot_component_panel(
     ax: Axes,
     grid: gpd.GeoDataFrame,
     summary: pd.DataFrame,
-    species: str,
     bounds: MapBounds,
     land: gpd.GeoDataFrame,
     coast: gpd.GeoDataFrame,
 ) -> list[int]:
-    """Draw one species dominant-component map panel."""
+    """Draw one dominant-component map panel."""
     ax.set_facecolor(OCEAN_COLOR)
     bounds.apply_to_axis(ax, margin=0.35)
 
-    species_summary = summary[summary["species"] == species].copy()
-    if species_summary.empty:
-        raise ValueError(f"No component rows found for {species}")
+    if summary.empty:
+        raise ValueError("No component rows found")
 
-    plot_gdf = grid.merge(species_summary, on="h3", how="left")
+    plot_gdf = grid.merge(summary, on="h3", how="left")
     plot_gdf = plot_gdf.dropna(subset=["dominant_component"]).copy()
     plot_gdf["dominant_component"] = plot_gdf["dominant_component"].astype(int)
     plot_gdf["component_color"] = plot_gdf["dominant_component"].map(
@@ -235,7 +245,6 @@ def plot_species_panel(
         crs=grid.crs or MAP_CRS,
     )
     draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(species, fontsize=11)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xlabel("")
@@ -244,55 +253,51 @@ def plot_species_panel(
     return sorted(plot_gdf["dominant_component"].unique().tolist())
 
 
-def save_species_component_map(
+def save_component_map(
     summary: pd.DataFrame,
     year: int,
-    species: str,
     out_file: Path,
 ) -> None:
-    """Save one dominant-component map for one species."""
+    """Save one dominant-component map."""
     grid = load_grid(uint64=True)
     land, coast = load_reference_layers()
     bounds = MapBounds.from_config()
 
     fig, ax = plt.subplots(figsize=(8.2, 7.2), constrained_layout=False)
-    used_components = plot_species_panel(
+    used_components = plot_component_panel(
         ax=ax,
         grid=grid,
         summary=summary,
-        species=species,
         bounds=bounds,
         land=land,
         coast=coast,
     )
 
     fig.suptitle(
-        f"Dominant Bayesian/GMM Components — {species} — {year}",
+        f"Dominant Bayesian/GMM Environmental Components — {year}",
         fontsize=14,
         y=0.98,
     )
-    legend_handles = [
-        Patch(
-            facecolor=COMPONENT_COLORS[component],
-            edgecolor="none",
-            label=f"Component {component}",
-        )
-        for component in used_components
-    ]
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center",
-        ncol=min(4, len(legend_handles)),
-        frameon=False,
-        fontsize=8,
-        bbox_to_anchor=(0.5, 0.02),
-    )
     fig.subplots_adjust(
         left=0.03,
-        right=0.98,
+        right=0.86,
         top=0.92,
-        bottom=0.12,
+        bottom=0.04,
     )
+    components = sorted(used_components)
+    cbar_width = 0.030
+    fig_width, fig_height = fig.get_size_inches()
+    segment_height = cbar_width * fig_width / fig_height
+    cbar_height = segment_height * max(1, len(components))
+    cbar_bottom = 0.50 - cbar_height / 2
+    cbar_rect: tuple[float, float, float, float] = (
+        0.89,
+        cbar_bottom,
+        cbar_width,
+        cbar_height,
+    )
+    cax = fig.add_axes(cbar_rect)
+    draw_component_colorbar(fig, cax, components)
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=300, bbox_inches="tight")
@@ -349,16 +354,14 @@ def plot_month_panel(
     return sorted(plot_gdf["dominant_component"].unique().tolist())
 
 
-def save_species_monthly_component_matrix(
+def save_monthly_component_matrix(
     monthly: pd.DataFrame,
     year: int,
-    species: str,
     out_file: Path,
 ) -> None:
-    """Save a 12-panel monthly dominant-component matrix for one species."""
-    species_monthly = monthly[monthly["species"] == species].copy()
-    if species_monthly.empty:
-        raise ValueError(f"No monthly component rows found for {species}")
+    """Save a 12-panel monthly dominant-component matrix."""
+    if monthly.empty:
+        raise ValueError("No monthly component rows found")
 
     grid = load_grid(uint64=True)
     land, coast = load_reference_layers()
@@ -378,7 +381,7 @@ def save_species_monthly_component_matrix(
             plot_month_panel(
                 ax=ax,
                 grid=grid,
-                monthly=species_monthly,
+                monthly=monthly,
                 month=month,
                 bounds=bounds,
                 land=land,
@@ -387,7 +390,7 @@ def save_species_monthly_component_matrix(
         )
 
     fig.suptitle(
-        f"Monthly Dominant Bayesian/GMM Components — {species} — {year}",
+        f"Monthly Dominant Bayesian/GMM Environmental Components — {year}",
         fontsize=16,
         y=0.985,
     )
@@ -422,24 +425,11 @@ def save_species_monthly_component_matrix(
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Plot dominant Bayesian/GMM components by species.",
+        description="Plot dominant Bayesian/GMM environmental components.",
     )
     parser.add_argument("--year", type=int, default=YEAR)
-    parser.add_argument(
-        "--model",
-        default=MODEL_NAME,
-        help="Plausibility model name used for filtering non-zero support.",
-    )
-    parser.add_argument(
-        "--product",
-        default=PRODUCT_NAME,
-        help="Plausibility product name used for filtering non-zero support.",
-    )
-    parser.add_argument(
-        "--species",
-        default=",".join(SPECIES),
-        help="Comma-separated species codes.",
-    )
+    parser.add_argument("--model", default=MODEL_NAME, help=argparse.SUPPRESS)
+    parser.add_argument("--product", default=PRODUCT_NAME, help=argparse.SUPPRESS)
     parser.add_argument(
         "--output-root",
         type=Path,
@@ -464,11 +454,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """Run the component mapping workflow."""
     args = parse_args()
-    species_values = [
-        species.strip()
-        for species in args.species.split(",")
-        if species.strip()
-    ]
 
     summary = dominant_components(
         year=args.year,
@@ -485,18 +470,13 @@ def main() -> int:
 
     print("Saved:", summary_file)
 
-    for species in species_values:
-        figure_file = (
-            args.output_root
-            / f"dominant_bayesian_gmm_components_{species}_{args.year}.png"
-        )
-        save_species_component_map(
-            summary=summary,
-            year=args.year,
-            species=species,
-            out_file=figure_file,
-        )
-        print("Saved:", figure_file)
+    figure_file = args.output_root / f"dominant_bayesian_gmm_components_{args.year}.png"
+    save_component_map(
+        summary=summary,
+        year=args.year,
+        out_file=figure_file,
+    )
+    print("Saved:", figure_file)
 
     if args.monthly:
         monthly = monthly_dominant_components(
@@ -511,18 +491,16 @@ def main() -> int:
         monthly.to_parquet(monthly_file, index=False)
         print("Saved:", monthly_file)
 
-        for species in species_values:
-            figure_file = (
-                args.output_root
-                / f"monthly_dominant_bayesian_gmm_components_{species}_{args.year}.png"
-            )
-            save_species_monthly_component_matrix(
-                monthly=monthly,
-                year=args.year,
-                species=species,
-                out_file=figure_file,
-            )
-            print("Saved:", figure_file)
+        figure_file = (
+            args.output_root
+            / f"monthly_dominant_bayesian_gmm_components_{args.year}.png"
+        )
+        save_monthly_component_matrix(
+            monthly=monthly,
+            year=args.year,
+            out_file=figure_file,
+        )
+        print("Saved:", figure_file)
 
     return 0
 
