@@ -27,6 +27,11 @@ from riskscape.visualization.base_map import (
 # 0.5 vessel-hours per H3 cell/day
 MINIMUM_EFFORT_UNIT = 0.5
 
+# Fixed display maximum for predicted log-transformed residence index.
+# Computed as the 99.5th percentile of annual H3-level non-zero mean
+# species-use values across the full 2014-2023 joint prediction dataset.
+SPECIES_USE_LOG_COLOR_MAX = 1.5
+
 
 @dataclass(frozen=True)
 class MapStyle:

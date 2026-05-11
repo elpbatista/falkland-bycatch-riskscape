@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
+    SPECIES_USE_LOG_COLOR_MAX,
     MapStyle,
     aggregation_name,
     figure_root,
@@ -16,6 +18,7 @@ from riskscape.visualization.maps import (
     plot_hazard_df_map,
     plot_hazard_plausibility_df_map,
     plot_prediction_df_map,
+    summarize_h3,
 )
 
 
@@ -61,7 +64,119 @@ SPECIES_USE_STYLE = MapStyle(
     colorbar_title="Species Use",
     show_reference_map=False,
     min_display_value=0.0,
+    color_min=0.0,
+    color_max=SPECIES_USE_LOG_COLOR_MAX,
+    color_quantile=None,
 )
+
+
+def aggregated_values(
+    df: pd.DataFrame,
+    value_col: str,
+    species: str,
+    agg: str,
+) -> pd.Series:
+    """Return map-level H3 values for one species/value."""
+    summary = summarize_h3(
+        df=df,
+        value_col=value_col,
+        species=species,
+        agg=agg,
+    )
+    value_name = f"{value_col}_{aggregation_name(agg)}"
+    return summary[value_name].dropna()
+
+
+def shared_linear_style(
+    style: MapStyle,
+    values: pd.Series,
+) -> MapStyle:
+    """Return a fixed-scale continuous map style shared across panels."""
+    if style.color_max is not None:
+        return replace(style, color_quantile=None)
+
+    positive = values[values > 0].dropna()
+    if positive.empty:
+        return style
+
+    color_max = float(positive.quantile(0.99))
+    if color_max <= 0:
+        color_max = float(positive.max())
+
+    return replace(
+        style,
+        color_min=0.0,
+        color_max=color_max,
+        color_quantile=None,
+    )
+
+
+def shared_binned_style(
+    style: MapStyle,
+    values: pd.Series,
+) -> MapStyle:
+    """Return a fixed-boundary binned style shared across panels."""
+    if style.colorbar_labels is None:
+        return style
+
+    lower = style.color_min if style.color_min is not None else 0.0
+    positive = values[values > lower].dropna()
+    if positive.empty:
+        return style
+
+    quantiles = style.colorbar_quantiles or (0.0, 0.50, 0.90, 0.98, 1.0)
+    bins = positive.quantile(quantiles).to_numpy(dtype="float64")
+    bins[0] = lower
+
+    if (bins[1:] <= bins[:-1]).any():
+        upper = float(positive.quantile(0.99))
+        if upper <= lower:
+            upper = float(positive.max())
+        if upper <= lower:
+            upper = lower * 1.01 if lower > 0 else 1.0
+        if style.color_scale == "log" and lower > 0:
+            bins = np.geomspace(lower, upper, len(style.colorbar_labels) + 1)
+        else:
+            bins = np.linspace(lower, upper, len(style.colorbar_labels) + 1)
+
+    return replace(
+        style,
+        colorbar_quantiles=None,
+        colorbar_boundaries=tuple(float(value) for value in bins),
+        color_max=float(bins[-1]),
+    )
+
+
+def shared_styles(
+    predictions: pd.DataFrame,
+    species: list[str],
+    agg: str,
+) -> tuple[MapStyle, MapStyle, MapStyle, MapStyle]:
+    """Return fixed map styles for all maps produced in this run."""
+    species_values = pd.concat(
+        [
+            aggregated_values(predictions, "species_use_log_pred", item, agg)
+            for item in species
+        ],
+        ignore_index=True,
+    )
+    risk_values = pd.concat(
+        [
+            aggregated_values(predictions, "risk_log_pred", item, agg)
+            for item in species
+        ],
+        ignore_index=True,
+    )
+
+    species_style = shared_linear_style(SPECIES_USE_STYLE, species_values)
+    realized_style = shared_binned_style(REALIZED_RISK_STYLE, risk_values)
+    hazard_style = shared_binned_style(HAZARD_STYLE, risk_values)
+    plausible_hazard_style = shared_binned_style(
+        HAZARD_PLAUSIBILITY_STYLE,
+        risk_values,
+    )
+
+    return species_style, realized_style, hazard_style, plausible_hazard_style
 
 
 def prediction_path(
@@ -134,6 +249,12 @@ def output_file(
     )
 
 
+def map_title(base_title: str | None, species: str, year: int) -> str:
+    """Return the display title for a species-year prediction map."""
+    title = base_title or "Prediction"
+    return f"{title} — {species}, {year}"
+
+
 def main() -> int:
     """Run prediction map plots."""
     agg_name = aggregation_name(AGG)
@@ -157,6 +278,13 @@ def main() -> int:
                 model_name=model_name,
                 product_name=product_name,
             )
+            species_style, realized_style, hazard_style, plausible_hazard_style = (
+                shared_styles(
+                    predictions=predictions,
+                    species=[item[1] for item in PREDICTION_PRODUCTS],
+                    agg=AGG,
+                )
+            )
             plausibility = load_plausibility_product(
                 year=YEAR,
                 product_name=product_name,
@@ -167,7 +295,7 @@ def main() -> int:
                 value_col="species_use_log_pred",
                 species=species,
                 agg=AGG,
-                title=SPECIES_USE_STYLE.title,
+                title=map_title(SPECIES_USE_STYLE.title, species, YEAR),
                 out_file=output_file(
                     model_name,
                     product_name,
@@ -175,7 +303,7 @@ def main() -> int:
                     species,
                     YEAR,
                 ),
-                style=SPECIES_USE_STYLE,
+                style=species_style,
             )
             print(f"Saved: {out_file}")
 
@@ -184,7 +312,7 @@ def main() -> int:
                 value_col="risk_log_pred",
                 species=species,
                 agg=AGG,
-                title=REALIZED_RISK_STYLE.title,
+                title=map_title(REALIZED_RISK_STYLE.title, species, YEAR),
                 out_file=output_file(
                     model_name,
                     product_name,
@@ -192,7 +320,7 @@ def main() -> int:
                     species,
                     YEAR,
                 ),
-                style=REALIZED_RISK_STYLE,
+                style=realized_style,
             )
             print(f"Saved: {out_file}")
 
@@ -201,7 +329,7 @@ def main() -> int:
                 species=species,
                 agg=AGG,
                 minimum_effort_unit=MINIMUM_EFFORT_UNIT,
-                title=HAZARD_STYLE.title,
+                title=map_title(HAZARD_STYLE.title, species, YEAR),
                 out_file=output_file(
                     model_name,
                     product_name,
@@ -210,7 +338,7 @@ def main() -> int:
                     YEAR,
                     agg_name,
                 ),
-                style=HAZARD_STYLE,
+                style=hazard_style,
             )
             print(f"Saved: {out_file}")
 
@@ -222,7 +350,11 @@ def main() -> int:
                 plausibility_agg=PLAUSIBILITY_AGG,
                 confidence_threshold=PLAUSIBLE_RISK_CONFIDENCE_THRESHOLD,
                 minimum_effort_unit=MINIMUM_EFFORT_UNIT,
-                title=HAZARD_PLAUSIBILITY_STYLE.title,
+                title=map_title(
+                    HAZARD_PLAUSIBILITY_STYLE.title,
+                    species,
+                    YEAR,
+                ),
                 out_file=output_file(
                     model_name,
                     product_name,
@@ -231,7 +363,7 @@ def main() -> int:
                     YEAR,
                     f"plausibility_threshold_{agg_name}_{plausibility_agg_name}",
                 ),
-                style=HAZARD_PLAUSIBILITY_STYLE,
+                style=plausible_hazard_style,
             )
             print(f"Saved: {out_file}")
 
