@@ -10,6 +10,7 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
+from riskscape.utils.dates import normalize_date_column
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def clean_telemetry(df: pd.DataFrame) -> pd.DataFrame:
 
     out = out.dropna(subset=["timestamp", "lat", "lon"]).reset_index(drop=True)
 
-    out["date"] = out["timestamp"].dt.floor("D")
+    out["date"] = out["timestamp"].dt.floor("D").dt.tz_localize(None)
     out["lat"] = out["lat"].astype("float32")
     out["lon"] = out["lon"].astype("float32")
     out["species"] = out["species"].astype("string")
@@ -130,7 +131,7 @@ def aggregate_to_h3(
     )
 
     out["h3"] = out["h3"].astype("uint64")
-    out["date"] = pd.to_datetime(out["date"], utc=True)
+    out = normalize_date_column(out)
     out["species"] = out["species"].astype("string")
     out["presence_count"] = out["presence_count"].astype("uint16")
     out["individual_count"] = out["individual_count"].astype("uint16")
@@ -145,6 +146,7 @@ def write_year(df: pd.DataFrame, year: int) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = out_dir / "part.parquet"
+    df = normalize_date_column(df)
     df.to_parquet(out_file, index=False, compression="zstd")
 
     return out_file

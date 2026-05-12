@@ -10,6 +10,7 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
+from riskscape.utils.dates import normalize_date_column
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ def aggregate_to_h3(df: pd.DataFrame, grid: gpd.GeoDataFrame) -> pd.DataFrame:
     )
 
     out["h3"] = out["h3"].astype("uint64")
-    out["date"] = pd.to_datetime(out["date"], utc=True)
+    out = normalize_date_column(out)
     out["fishing_hours"] = out["fishing_hours"].astype("float32")
     out["vessel_count"] = out["vessel_count"].astype("uint16")
 
@@ -102,6 +103,7 @@ def write_year(df: pd.DataFrame, year: int) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = out_dir / "part.parquet"
+    df = normalize_date_column(df)
     df.to_parquet(out_file, index=False, compression="zstd")
 
     return out_file

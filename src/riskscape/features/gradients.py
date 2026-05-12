@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.utils.dates import normalize_date_column
 
 
 VARIABLES = ["sst", "chl_log", "ssh"]
@@ -147,7 +148,7 @@ def process_environmental_gradients() -> None:
         raise ValueError("h3_neighbors and h3_neighbor_index row counts differ")
 
     for path in parts:
-        df = pd.read_parquet(path)
+        df = normalize_date_column(pd.read_parquet(path))
 
         df = add_gradients(
             df=df,
@@ -156,6 +157,7 @@ def process_environmental_gradients() -> None:
             variables=VARIABLES,
         )
 
+        df = normalize_date_column(df)
         df.to_parquet(path, index=False, compression="zstd")
 
         print(f"Updated gradients: {path}")

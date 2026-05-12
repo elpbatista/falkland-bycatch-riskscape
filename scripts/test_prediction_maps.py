@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import numpy as np
+
 from riskscape.config import paths
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
@@ -22,8 +24,8 @@ RISK_STYLE = MapStyle(
     color_scale="log",
     alpha_scale=False,
     show_reference_map=False,
-    min_display_value=MINIMUM_EFFORT_UNIT,
-    color_min=MINIMUM_EFFORT_UNIT,
+    min_display_value=float(np.log1p(MINIMUM_EFFORT_UNIT)),
+    color_min=float(np.log1p(MINIMUM_EFFORT_UNIT)),
     colorbar_labels=("Low", "Mod", "High", "Xtrm"),
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )

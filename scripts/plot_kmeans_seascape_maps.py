@@ -17,6 +17,7 @@ from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
+from matplotlib import colormaps
 import pandas as pd
 
 from riskscape.config import paths
@@ -50,13 +51,46 @@ SEASCAPE_COLORS = {
 }
 
 
+def extended_class_colors(n_classes: int) -> dict[int, str]:
+    """Return a stable discrete color lookup for seascape classes."""
+    color_lookup = dict(SEASCAPE_COLORS)
+    palettes = ["tab20", "tab20b", "tab20c"]
+    colors_needed = max(0, n_classes - len(color_lookup))
+
+    if colors_needed == 0:
+        return color_lookup
+
+    generated: list[str] = []
+    for palette_name in palettes:
+        cmap = colormaps[palette_name]
+        generated.extend(
+            colors.to_hex(cmap(i / cmap.N))
+            for i in range(cmap.N)
+        )
+
+    for seascape in range(len(color_lookup), n_classes):
+        color_lookup[seascape] = generated[
+            (seascape - len(SEASCAPE_COLORS)) % len(generated)
+        ]
+
+    return color_lookup
+
+
+def seascape_colors(seascapes: list[int]) -> dict[int, str]:
+    """Return colors for observed seascapes."""
+    if not seascapes:
+        return {}
+    return extended_class_colors(max(seascapes) + 1)
+
+
 def draw_seascape_colorbar(fig: Any, cax: Axes, seascapes: list[int]) -> None:
     """Draw a discrete seascape color bar matching the component-map style."""
     if not seascapes:
         cax.axis("off")
         return
 
-    cmap = colors.ListedColormap([SEASCAPE_COLORS[seascape] for seascape in seascapes])
+    lookup = seascape_colors(seascapes)
+    cmap = colors.ListedColormap([lookup[seascape] for seascape in seascapes])
     boundaries = list(range(len(seascapes) + 1))
     ticks = [idx + 0.5 for idx in range(len(seascapes))]
     norm = colors.BoundaryNorm(boundaries, cmap.N)
@@ -130,6 +164,13 @@ def month_panel_title(month: int) -> str:
     return calendar.month_abbr[month]
 
 
+def display_model_name(model_name: str) -> str:
+    """Return display-safe model text for figure titles."""
+    if "_k" in model_name:
+        return f"k = {model_name.rsplit('_k', maxsplit=1)[1]}"
+    return model_name
+
+
 def plot_month_panel(
     ax: Axes,
     grid: gpd.GeoDataFrame,
@@ -151,8 +192,9 @@ def plot_month_panel(
     else:
         plot_gdf = grid.merge(month_values, on="h3", how="inner")
         plot_gdf["dominant_seascape"] = plot_gdf["dominant_seascape"].astype(int)
+        lookup = seascape_colors(plot_gdf["dominant_seascape"].unique().tolist())
         plot_gdf["seascape_color"] = plot_gdf["dominant_seascape"].map(
-            SEASCAPE_COLORS
+            lookup
         )
 
     if not plot_gdf.empty:
@@ -217,7 +259,7 @@ def save_monthly_seascape_matrix(
         )
 
     fig.suptitle(
-        f"Monthly Dominant KMeans Seascapes — {year}",
+        f"Monthly Dominant k-means Seascapes ({display_model_name(model_name)}) — {year}",
         fontsize=16,
         y=0.985,
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import duckdb
 import numpy as np
 import pandas as pd
 
@@ -11,6 +12,7 @@ from riskscape.config import paths
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
     SPECIES_USE_LOG_COLOR_MAX,
+    SPECIES_USE_LOG_MIN_DISPLAY,
     MapStyle,
     aggregation_name,
     figure_root,
@@ -23,22 +25,26 @@ from riskscape.visualization.maps import (
 
 
 YEAR = 2022
-MODEL_NAMES = ["hybrid_presence_gate_extra_trees_bayesian_gmm"]
+MODEL_NAMES = [
+    "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
+]
 PREDICTION_PRODUCTS = [
     ("joint", "BBAL"),
     ("joint", "SAFS"),
 ]
-AGG = "non_zero_median"
-PLAUSIBILITY_AGG = "non_zero_median"
-PLAUSIBLE_RISK_CONFIDENCE_THRESHOLD = 0.25
+AGG = "non_zero_mean"
+PLAUSIBILITY_AGG = "non_zero_mean"
+PLAUSIBLE_RISK_CONFIDENCE_THRESHOLD = 0.10
+LOG_MINIMUM_EFFORT_UNIT = float(np.log1p(MINIMUM_EFFORT_UNIT))
 
 
 RISK_STYLE = MapStyle(
     color_scale="log",
     alpha_scale=False,
+    alpha=0.90,
     show_reference_map=False,
-    min_display_value=MINIMUM_EFFORT_UNIT,
-    color_min=MINIMUM_EFFORT_UNIT,
+    min_display_value=LOG_MINIMUM_EFFORT_UNIT,
+    color_min=LOG_MINIMUM_EFFORT_UNIT,
     colorbar_labels=("Low", "Mod", "High", "Xtrm"),
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )
@@ -63,7 +69,7 @@ SPECIES_USE_STYLE = MapStyle(
     title="Species Use",
     colorbar_title="Species Use",
     show_reference_map=False,
-    min_display_value=0.0,
+    min_display_value=SPECIES_USE_LOG_MIN_DISPLAY,
     color_min=0.0,
     color_max=SPECIES_USE_LOG_COLOR_MAX,
     color_quantile=None,
@@ -85,6 +91,57 @@ def aggregated_values(
     )
     value_name = f"{value_col}_{aggregation_name(agg)}"
     return summary[value_name].dropna()
+
+
+def aggregate_expression(column: str, agg: str) -> str:
+    """Return a DuckDB expression matching the map aggregation mode."""
+    agg_name = aggregation_name(agg)
+
+    if agg_name == "non_zero_median":
+        return (
+            f"COALESCE(median(CASE WHEN {column} > 0 THEN {column} "
+            "ELSE NULL END), 0.0)"
+        )
+    if agg_name == "non_zero_mean":
+        return (
+            f"COALESCE(avg(CASE WHEN {column} > 0 THEN {column} "
+            "ELSE NULL END), 0.0)"
+        )
+    if agg_name in {"mean", "median", "max"}:
+        return f"{agg_name}({column})"
+
+    raise ValueError(f"Unsupported aggregation: {agg}")
+
+
+def load_aggregated_predictions(
+    path,
+    species_values: list[str],
+    agg: str,
+    plausibility_agg: str,
+) -> pd.DataFrame:
+    """Load annual H3-level prediction summaries from parquet."""
+    species_sql = ", ".join(f"'{species}'" for species in species_values)
+    species_use_expr = aggregate_expression("species_use_log_pred", agg)
+    risk_expr = aggregate_expression("risk_log_pred", agg)
+    plausibility_expr = aggregate_expression("plausibility", plausibility_agg)
+
+    query = f"""
+        SELECT
+            h3,
+            species,
+            {species_use_expr}::FLOAT AS species_use_log_pred,
+            {risk_expr}::FLOAT AS risk_log_pred,
+            {plausibility_expr}::FLOAT AS plausibility
+        FROM read_parquet($path, hive_partitioning=false)
+        WHERE species IN ({species_sql})
+        GROUP BY h3, species
+    """
+
+    with duckdb.connect(database=":memory:") as con:
+        out = con.execute(query, {"path": str(path)}).fetchdf()
+
+    out["h3"] = out["h3"].astype("uint64")
+    return out
 
 
 def shared_linear_style(
@@ -261,7 +318,9 @@ def main() -> int:
     plausibility_agg_name = aggregation_name(PLAUSIBILITY_AGG)
 
     for model_name in MODEL_NAMES:
-        for product_name, species in PREDICTION_PRODUCTS:
+        product_names = sorted({product for product, _ in PREDICTION_PRODUCTS})
+
+        for product_name in product_names:
             input_path = prediction_path(
                 year=YEAR,
                 model_name=model_name,
@@ -272,100 +331,111 @@ def main() -> int:
                 print(f"Skipping missing input: {input_path}")
                 continue
 
+            species_values = [
+                species
+                for product, species in PREDICTION_PRODUCTS
+                if product == product_name
+            ]
             print(f"Input: {input_path}")
-            predictions = load_predictions(
-                year=YEAR,
-                model_name=model_name,
-                product_name=product_name,
+            predictions = load_aggregated_predictions(
+                path=input_path,
+                species_values=species_values,
+                agg=AGG,
+                plausibility_agg=PLAUSIBILITY_AGG,
             )
             species_style, realized_style, hazard_style, plausible_hazard_style = (
                 shared_styles(
                     predictions=predictions,
-                    species=[item[1] for item in PREDICTION_PRODUCTS],
+                    species=species_values,
                     agg=AGG,
                 )
             )
-            plausibility = load_plausibility_product(
-                year=YEAR,
-                product_name=product_name,
-            )
+            plausibility = None
+            if "plausibility" not in predictions.columns:
+                plausibility = load_plausibility_product(
+                    year=YEAR,
+                    product_name=product_name,
+                )
 
-            out_file = plot_prediction_df_map(
-                df=predictions,
-                value_col="species_use_log_pred",
-                species=species,
-                agg=AGG,
-                title=map_title(SPECIES_USE_STYLE.title, species, YEAR),
-                out_file=output_file(
-                    model_name,
-                    product_name,
-                    f"species_use_log_pred_{agg_name}",
-                    species,
-                    YEAR,
-                ),
-                style=species_style,
-            )
-            print(f"Saved: {out_file}")
+            for species in species_values:
+                print(f"Plotting: {model_name} {product_name} {species}")
 
-            out_file = plot_prediction_df_map(
-                df=predictions,
-                value_col="risk_log_pred",
-                species=species,
-                agg=AGG,
-                title=map_title(REALIZED_RISK_STYLE.title, species, YEAR),
-                out_file=output_file(
-                    model_name,
-                    product_name,
-                    f"risk_log_pred_{agg_name}",
-                    species,
-                    YEAR,
-                ),
-                style=realized_style,
-            )
-            print(f"Saved: {out_file}")
+                out_file = plot_prediction_df_map(
+                    df=predictions,
+                    value_col="species_use_log_pred",
+                    species=species,
+                    agg=AGG,
+                    title=map_title(SPECIES_USE_STYLE.title, species, YEAR),
+                    out_file=output_file(
+                        model_name,
+                        product_name,
+                        f"species_use_log_pred_{agg_name}",
+                        species,
+                        YEAR,
+                    ),
+                    style=species_style,
+                )
+                print(f"Saved: {out_file}")
 
-            out_file = plot_hazard_df_map(
-                df=predictions,
-                species=species,
-                agg=AGG,
-                minimum_effort_unit=MINIMUM_EFFORT_UNIT,
-                title=map_title(HAZARD_STYLE.title, species, YEAR),
-                out_file=output_file(
-                    model_name,
-                    product_name,
-                    "hazard_log_pred",
-                    species,
-                    YEAR,
-                    agg_name,
-                ),
-                style=hazard_style,
-            )
-            print(f"Saved: {out_file}")
+                out_file = plot_prediction_df_map(
+                    df=predictions,
+                    value_col="risk_log_pred",
+                    species=species,
+                    agg=AGG,
+                    title=map_title(REALIZED_RISK_STYLE.title, species, YEAR),
+                    out_file=output_file(
+                        model_name,
+                        product_name,
+                        f"risk_log_pred_{agg_name}",
+                        species,
+                        YEAR,
+                    ),
+                    style=realized_style,
+                )
+                print(f"Saved: {out_file}")
 
-            out_file = plot_hazard_plausibility_df_map(
-                predictions=predictions,
-                plausibility_df=plausibility,
-                species=species,
-                agg=AGG,
-                plausibility_agg=PLAUSIBILITY_AGG,
-                confidence_threshold=PLAUSIBLE_RISK_CONFIDENCE_THRESHOLD,
-                minimum_effort_unit=MINIMUM_EFFORT_UNIT,
-                title=map_title(
-                    HAZARD_PLAUSIBILITY_STYLE.title,
-                    species,
-                    YEAR,
-                ),
-                out_file=output_file(
-                    model_name,
-                    product_name,
-                    "hazard_log_pred",
-                    species,
-                    YEAR,
-                    f"plausibility_threshold_{agg_name}_{plausibility_agg_name}",
-                ),
-                style=plausible_hazard_style,
-            )
-            print(f"Saved: {out_file}")
+                out_file = plot_hazard_df_map(
+                    df=predictions,
+                    species=species,
+                    agg=AGG,
+                    minimum_effort_unit=MINIMUM_EFFORT_UNIT,
+                    title=map_title(HAZARD_STYLE.title, species, YEAR),
+                    out_file=output_file(
+                        model_name,
+                        product_name,
+                        "hazard_log_pred",
+                        species,
+                        YEAR,
+                        agg_name,
+                    ),
+                    style=hazard_style,
+                )
+                print(f"Saved: {out_file}")
+
+                out_file = plot_hazard_plausibility_df_map(
+                    predictions=predictions,
+                    plausibility_df=plausibility,
+                    species=species,
+                    agg=AGG,
+                    plausibility_agg=PLAUSIBILITY_AGG,
+                    confidence_threshold=PLAUSIBLE_RISK_CONFIDENCE_THRESHOLD,
+                    minimum_effort_unit=MINIMUM_EFFORT_UNIT,
+                    title=map_title(
+                        HAZARD_PLAUSIBILITY_STYLE.title,
+                        species,
+                        YEAR,
+                    ),
+                    out_file=output_file(
+                        model_name,
+                        product_name,
+                        "hazard_log_pred",
+                        species,
+                        YEAR,
+                        f"plausibility_threshold_{agg_name}_{plausibility_agg_name}",
+                    ),
+                    style=plausible_hazard_style,
+                )
+                print(f"Saved: {out_file}")
 
     return 0
 

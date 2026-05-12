@@ -10,6 +10,7 @@ import numpy as np
 from riskscape.grid import load_grid
 
 from riskscape.config import paths
+from riskscape.utils.dates import normalize_date_column
 
 
 DYNAMIC_FEATURES = [
@@ -96,7 +97,7 @@ def load_partition(table: str, year: int) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
 
-    return pd.read_parquet(path)
+    return normalize_date_column(pd.read_parquet(path))
 
 
 def load_static() -> pd.DataFrame:
@@ -152,6 +153,7 @@ def save_partition(df: pd.DataFrame, table: str, year: int) -> Path:
     """Save one modeling partition."""
     path = output_path(table, year)
     path.parent.mkdir(parents=True, exist_ok=True)
+    df = normalize_date_column(df)
     df.to_parquet(path, index=False, compression="zstd")
     return path
 
@@ -206,7 +208,7 @@ def load_feature_grid(year: int) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
 
-    return pd.read_parquet(path)
+    return normalize_date_column(pd.read_parquet(path))
 
 
 def species_list() -> list[str]:

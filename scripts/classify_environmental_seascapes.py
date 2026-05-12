@@ -17,14 +17,15 @@ from sklearn.preprocessing import StandardScaler
 
 from riskscape.config import paths
 from riskscape.model.dataset import FEATURES, modeling_root
+from riskscape.utils.dates import normalize_date_column
 
 
-N_CLASSES = 10
+N_CLASSES = 30
 YEARS = "2014-2023"
 SAMPLE_PER_YEAR = 200_000
 BATCH_ROWS = 250_000
 RANDOM_STATE = 42
-MODEL_NAME = "kmeans_k10"
+MODEL_NAME = "kmeans_k30"
 OUTPUT_ROOT = modeling_root("seascapes")
 METRICS_ROOT = paths["data"] / "modeling" / "metrics" / "seascapes"
 
@@ -60,9 +61,9 @@ def model_path(model_name: str) -> Path:
     return paths["data"] / "modeling" / "models" / "seascapes" / f"{model_name}.joblib"
 
 
-def component_path(year: int) -> Path:
+def component_path(year: int, component_table: str) -> Path:
     """Return Bayesian/GMM component assignment path for one year."""
-    return modeling_root("cube_components") / f"year={year}" / "part.parquet"
+    return modeling_root(component_table) / f"year={year}" / "part.parquet"
 
 
 def available_years() -> list[int]:
@@ -228,14 +229,14 @@ def assign_year(
         raise FileNotFoundError(f"Feature-grid partition not found: {path}")
 
     columns = ["h3", "date", *payload.features]
-    df = pd.read_parquet(path, columns=columns)
+    df = normalize_date_column(pd.read_parquet(path, columns=columns))
     df = clean_features(df, payload.features)
 
     frames = [
         assign_batch(batch, payload)
         for batch in iter_batches(df, batch_rows)
     ]
-    out = pd.concat(frames, ignore_index=True)
+    out = normalize_date_column(pd.concat(frames, ignore_index=True))
 
     out_file = seascape_path(year, out_model_name)
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -313,10 +314,14 @@ def summarize_seascapes(
 def compare_with_cube_components(
     years: list[int],
     out_model_name: str,
+    component_table: str,
 ) -> tuple[Path, Path]:
     """Compare seascape classes with Bayesian/GMM component assignments."""
     seascape_files = [str(seascape_path(year, out_model_name)) for year in years]
-    component_files = [str(component_path(year)) for year in years]
+    component_files = [
+        str(component_path(year, component_table))
+        for year in years
+    ]
 
     query = """
         WITH cube AS (
@@ -352,6 +357,7 @@ def compare_with_cube_components(
             {
                 "years": year_label(years),
                 "model": out_model_name,
+                "component_table": component_table,
                 "n_cell_days": total,
                 "seascape_to_component_purity": seascape_max / total,
                 "component_to_seascape_purity": component_max / total,
@@ -434,6 +440,14 @@ def parse_args() -> argparse.Namespace:
         help="Compare seascape classes against Bayesian/GMM cube components.",
     )
     parser.add_argument(
+        "--component-table",
+        default="cube_components",
+        help=(
+            "Modeling table containing Bayesian/GMM component assignments "
+            "for --compare-components."
+        ),
+    )
+    parser.add_argument(
         "--all-steps",
         action="store_true",
         help="Run fit, assign, summarize, and compare.",
@@ -485,6 +499,7 @@ def main() -> int:
         compare_with_cube_components(
             years=years,
             out_model_name=out_model_name,
+            component_table=args.component_table,
         )
 
     return 0

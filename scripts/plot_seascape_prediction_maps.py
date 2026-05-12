@@ -17,6 +17,7 @@ from sklearn.metrics import pairwise_distances
 
 from riskscape.config import paths
 from riskscape.model.predict import output_columns
+from riskscape.utils.dates import normalize_date_column
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
     SPECIES_USE_LOG_COLOR_MAX,
@@ -30,11 +31,13 @@ from riskscape.visualization.maps import (
 
 YEAR = 2022
 MODEL_NAME = "kmeans_k10"
-PREDICTION_MODEL = "hybrid_presence_gate_extra_trees_bayesian_gmm"
+PREDICTION_MODEL = (
+    "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
+)
 PREDICTION_PRODUCT = "joint"
 SPECIES = ["BBAL", "SAFS"]
 AGG = "non_zero_mean"
-SEASCAPE_PREDICTION_MODEL = "seascape_kmeans_k10"
+SEASCAPE_PREDICTION_PREFIX = "seascape"
 BATCH_ROWS = 250_000
 SOFT_TEMPERATURE_SCALE = 0.35
 
@@ -51,13 +54,9 @@ SOURCE_PREDICTION_ROOT = (
     / PREDICTION_MODEL
     / PREDICTION_PRODUCT
 )
-SEASCAPE_PREDICTION_ROOT = (
-    paths["data"]
-    / "modeling"
-    / "predictions"
-    / SEASCAPE_PREDICTION_MODEL
-    / PREDICTION_PRODUCT
-)
+def seascape_prediction_model_name(model_name: str) -> str:
+    """Return output prediction product name for one seascape model."""
+    return f"{SEASCAPE_PREDICTION_PREFIX}_{model_name}"
 
 
 REALIZED_RISK_STYLE = MapStyle(
@@ -65,9 +64,10 @@ REALIZED_RISK_STYLE = MapStyle(
     title="Realized Risk",
     colorbar_title="Realized Risk",
     alpha_scale=False,
+    alpha=0.90,
     show_reference_map=False,
-    min_display_value=MINIMUM_EFFORT_UNIT,
-    color_min=MINIMUM_EFFORT_UNIT,
+    min_display_value=float(np.log1p(MINIMUM_EFFORT_UNIT)),
+    color_min=float(np.log1p(MINIMUM_EFFORT_UNIT)),
     colorbar_labels=("Low", "Mod", "High", "Xtrm"),
     colorbar_quantiles=(0.0, 0.50, 0.90, 0.98, 1.0),
 )
@@ -226,9 +226,17 @@ def prediction_path(year: int) -> Path:
     return SOURCE_PREDICTION_ROOT / f"year={year}" / "part.parquet"
 
 
-def seascape_prediction_path(year: int) -> Path:
+def seascape_prediction_path_for_model(year: int, model_name: str) -> Path:
     """Return standard-schema seascape prediction partition path."""
-    return SEASCAPE_PREDICTION_ROOT / f"year={year}" / "part.parquet"
+    return (
+        paths["data"]
+        / "modeling"
+        / "predictions"
+        / seascape_prediction_model_name(model_name)
+        / PREDICTION_PRODUCT
+        / f"year={year}"
+        / "part.parquet"
+    )
 
 
 def load_seascape_model(model_name: str):
@@ -356,7 +364,7 @@ def build_seascape_prediction_product(
 ) -> Path:
     """Write a standard prediction product for soft seascape-conditioned maps."""
     feature_file = feature_grid_path(year)
-    out_file = seascape_prediction_path(year)
+    out_file = seascape_prediction_path_for_model(year, model_name)
 
     if not feature_file.exists():
         raise FileNotFoundError(f"Feature grid not found: {feature_file}")
@@ -392,7 +400,10 @@ def build_seascape_prediction_product(
         )
         if predictions.empty:
             continue
-        predictions[output_columns(SEASCAPE_PREDICTION_MODEL)].to_parquet(
+        out = normalize_date_column(
+            predictions[output_columns(seascape_prediction_model_name(model_name))]
+        )
+        out.to_parquet(
             parts_dir / f"part_{part_index:05d}.parquet",
             index=False,
             compression="zstd",
@@ -443,7 +454,7 @@ def main() -> int:
     print(f"Saved standard prediction product: {out_product}")
     predictions = load_predictions(
         year=args.year,
-        model_name=SEASCAPE_PREDICTION_MODEL,
+        model_name=seascape_prediction_model_name(args.model_name),
         product_name=PREDICTION_PRODUCT,
     )
     species_style, risk_style = shared_styles(
@@ -455,7 +466,7 @@ def main() -> int:
     for species in args.species:
         out_file = plot_prediction_map(
             year=args.year,
-            model_name=SEASCAPE_PREDICTION_MODEL,
+            model_name=seascape_prediction_model_name(args.model_name),
             product_name=PREDICTION_PRODUCT,
             value_col="species_use_log_pred",
             species=species,
@@ -467,7 +478,7 @@ def main() -> int:
 
         out_file = plot_prediction_map(
             year=args.year,
-            model_name=SEASCAPE_PREDICTION_MODEL,
+            model_name=seascape_prediction_model_name(args.model_name),
             product_name=PREDICTION_PRODUCT,
             value_col="risk_log_pred",
             species=species,

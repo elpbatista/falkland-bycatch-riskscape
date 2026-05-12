@@ -17,6 +17,7 @@ from riskscape.model.dataset import (
     load_feature_grid,
 )
 from riskscape.model.train import MODEL_NAMES
+from riskscape.utils.dates import normalize_date_column
 
 
 # Prediction mode options:
@@ -35,8 +36,8 @@ PREDICTION_MODE = "hybrid"
 ACTIVE_MODEL_NAME = "extra_trees"
 
 # Used only when PREDICTION_MODE = "hybrid".
-HYBRID_ML_MODEL_NAME = "extra_trees"
-HYBRID_BAYESIAN_MODEL_NAME = "bayesian_gmm"
+HYBRID_ML_MODEL_NAME = "extra_trees_kmeans_k15_blockcv"
+HYBRID_BAYESIAN_MODEL_NAME = "bayesian_gmm_k30"
 
 # Hybrid strategy options:
 #   "constant"      -> fixed weighted blend
@@ -736,6 +737,7 @@ def merge_year_parts(model_name: str, year: int) -> Path:
 
     frames = [pd.read_parquet(p) for p in parts]
     df = pd.concat(frames, ignore_index=True)
+    df = normalize_date_column(df)
 
     out_file = merged_output_path(model_name, year)
     df.to_parquet(out_file, index=False, compression="zstd")
@@ -762,6 +764,7 @@ def merge_product_year_parts(
 
     frames = [pd.read_parquet(p) for p in parts]
     df = pd.concat(frames, ignore_index=True)
+    df = normalize_date_column(df)
 
     out_file = product_merged_output_path(model_name, product_name, year)
     df.to_parquet(out_file, index=False, compression="zstd")
@@ -892,6 +895,7 @@ def predict_year(
 
         expanded = add_risk_columns(expanded)
         out = expanded[output_columns(model_name)]
+        out = normalize_date_column(out)
 
         out_file = out_dir / f"part-{i:05d}.parquet"
         out.to_parquet(out_file, index=False, compression="zstd")
@@ -918,6 +922,7 @@ def predict_product_year(
         expanded = build_product_predictions(batch, product_name, payload)
         expanded = add_risk_columns(expanded)
         out = expanded[output_columns(model_name)]
+        out = normalize_date_column(out)
 
         out_file = out_dir / f"part-{i:05d}.parquet"
         out.to_parquet(out_file, index=False, compression="zstd")
@@ -952,6 +957,7 @@ def predict_hybrid_product_year(
         )
         expanded = add_risk_columns(expanded)
         out = expanded[output_columns("hybrid")]
+        out = normalize_date_column(out)
 
         out_file = out_dir / f"part-{i:05d}.parquet"
         out.to_parquet(out_file, index=False, compression="zstd")

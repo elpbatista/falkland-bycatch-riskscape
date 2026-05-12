@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.utils.dates import normalize_date_column
 
 
 def load_partitioned(table: str) -> list[tuple[int, Path]]:
@@ -86,12 +87,13 @@ def process_environmental() -> None:
     parts = load_partitioned("environmental")
 
     for year, path in parts:
-        df = pd.read_parquet(path)
+        df = normalize_date_column(pd.read_parquet(path))
 
         df = add_wind_speed(df)
         df = add_chl_log(df)
         df = add_seasonal_features(df)
 
+        df = normalize_date_column(df)
         df.to_parquet(path, index=False, compression="zstd")
 
         print(f"Updated environmental year={year}")

@@ -19,6 +19,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from riskscape.config import paths
 from riskscape.model.dataset import FEATURES, SPECIES_TARGET
+from riskscape.utils.dates import normalize_date_column
 
 
 RANDOM_STATE = 42
@@ -37,7 +38,7 @@ MAX_POSITIVE_ROWS = None
 MODEL_DIR = paths["data"] / "modeling" / "models"
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
 
-GMM_COMPONENTS = 10
+GMM_COMPONENTS = 30
 GMM_REG_COVAR = 1e-6
 
 
@@ -180,7 +181,7 @@ def load_table(name: str) -> pd.DataFrame:
     frames = []
 
     for path in sorted(root.glob("year=*/part.parquet")):
-        frames.append(pd.read_parquet(path))
+        frames.append(normalize_date_column(pd.read_parquet(path)))
 
     if not frames:
         raise FileNotFoundError(f"No data found for {name}")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import joblib
@@ -10,10 +11,12 @@ import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.model.block_cv_train import SplitSummary
 from riskscape.model.dataset import load_feature_grid, modeling_root
+from riskscape.utils.dates import normalize_date_column
 
 
-MODEL_PATH = (
+DEFAULT_MODEL_PATH = (
     paths["data"]
     / "modeling"
     / "models"
@@ -21,7 +24,7 @@ MODEL_PATH = (
     / "species_model_joint.joblib"
 )
 
-OUT_ROOT = modeling_root("cube_components")
+DEFAULT_OUT_ROOT = modeling_root("cube_components")
 
 BATCH_ROWS = 250_000
 LOG_2PI = np.log(2.0 * np.pi)
@@ -47,9 +50,9 @@ def model_species(payload: dict) -> list[str]:
     return encoder.categories_[0].tolist()
 
 
-def component_path(year: int) -> Path:
+def component_path(out_root: Path, year: int) -> Path:
     """Return component assignment output partition path."""
-    return OUT_ROOT / f"year={year}" / "part.parquet"
+    return out_root / f"year={year}" / "part.parquet"
 
 
 def component_years() -> list[int]:
@@ -272,7 +275,7 @@ def process_batch(
     return out
 
 
-def assign_year(payload: dict, year: int) -> Path:
+def assign_year(payload: dict, year: int, out_root: Path) -> Path:
     """Assign components for one feature-grid year."""
     feature_grid = drop_invalid_feature_rows(
         load_model_feature_grid(payload, year),
@@ -287,8 +290,8 @@ def assign_year(payload: dict, year: int) -> Path:
             process_batch(batch, payload)
         )
 
-    out = pd.concat(frames, ignore_index=True)
-    out_path = component_path(year)
+    out = normalize_date_column(pd.concat(frames, ignore_index=True))
+    out_path = component_path(out_root, year)
 
     out_path.parent.mkdir(
         parents=True,
@@ -328,6 +331,20 @@ def parse_args() -> argparse.Namespace:
         action="append",
         help="Year to process. Can be provided more than once. Defaults to all years.",
     )
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        default=DEFAULT_MODEL_PATH,
+        help="Path to the Bayesian/GMM joint species model payload.",
+    )
+    parser.add_argument(
+        "--output-table",
+        default="cube_components",
+        help=(
+            "Modeling table name for outputs. Defaults to cube_components. "
+            "Use a different name for extension products to avoid overwriting."
+        ),
+    )
 
     return parser.parse_args()
 
@@ -335,13 +352,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """Run component assignment."""
     args = parse_args()
-    payload = joblib.load(MODEL_PATH)
+    setattr(sys.modules["__main__"], "SplitSummary", SplitSummary)
+    payload = joblib.load(args.model_path)
+    out_root = modeling_root(args.output_table)
     years = args.year if args.year else component_years()
+
+    print(f"Model: {args.model_path}")
+    print(f"Output table: {out_root}")
 
     for year in years:
         print()
         print(f"=== Assigning components for {year} ===")
-        assign_year(payload, year)
+        assign_year(payload, year, out_root)
 
     return 0
 

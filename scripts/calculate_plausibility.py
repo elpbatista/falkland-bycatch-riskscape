@@ -10,9 +10,10 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.model.dataset import FEATURES, available_years, species_list
+from riskscape.utils.dates import normalize_date_column
 
 
-MODEL_NAME = "bayesian_gmm"
+MODEL_NAME = "bayesian_gmm_k30"
 BATCH_ROWS = 250_000
 
 MODEL_DIR = paths["data"] / "modeling" / "models" / MODEL_NAME
@@ -35,7 +36,7 @@ def load_feature_grid(year: int) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame()
 
-    return pd.read_parquet(path)
+    return normalize_date_column(pd.read_parquet(path))
 
 
 def iter_batches(df: pd.DataFrame, batch_rows: int):
@@ -87,6 +88,7 @@ def save_year(df: pd.DataFrame, product: str, year: int) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     path = out_dir / "part.parquet"
+    df = normalize_date_column(df)
     df.to_parquet(path, index=False, compression="zstd")
 
     return path

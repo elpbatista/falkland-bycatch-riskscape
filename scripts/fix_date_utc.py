@@ -1,8 +1,9 @@
-"""Fix environmental date dtype to UTC."""
+"""Fix date dtype to timezone-free UTC calendar days."""
 
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.utils.dates import normalize_date_column
 
 
 def main() -> int:
@@ -12,7 +13,7 @@ def main() -> int:
     for path in sorted(root.glob("year=*/part.parquet")):
         df = pd.read_parquet(path)
 
-        df["date"] = pd.to_datetime(df["date"], utc=True)
+        df = normalize_date_column(df)
 
         df.to_parquet(path, index=False, compression="zstd")
 

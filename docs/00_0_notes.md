@@ -295,3 +295,25 @@ Yearly mean anomalies showed that the feature space retained interannual variabi
 <!-- Suggested figure: Time series of yearly mean SST and wind-speed anomalies across the study area. -->
 
 <!-- Suggested figure: Distribution plots or histograms of anomaly variables showing centered seasonal departures. -->
+
+---
+
+## Date-Key and Seascape Coverage Audit Note
+
+Updated: 2026-05-11 17:09:17 PDT.
+
+The project-wide `h3`/`date` key audit confirmed that the environmental feature grid and source environmental table are fully aligned after normalizing dates to timezone-free UTC calendar days. Across 2014-2023, every yearly `feature_grid` partition matched the corresponding environmental partition exactly on distinct `h3`/`date` keys, with no unmatched keys in either direction.
+
+Audit output:
+
+- `Repo/data/modeling/metrics/date_join_integrity/feature_grid_vs_environmental_join_integrity.csv`
+- `Repo/data/modeling/metrics/date_join_integrity/seascapes_vs_feature_grid_join_integrity.csv`
+- `Repo/data/modeling/metrics/date_join_integrity/kmeans_k15_feature_grid_unmatched_key_diagnostics.csv`
+
+The seascape assignments do not cover the full feature grid because the KMeans classifier requires complete environmental predictor vectors. Unassigned H3-day cells occur primarily where one or more dynamic predictors are unavailable, especially chlorophyll-related fields over land or masked coastal cells, SSH over land or masked near-coast cells, and wind fields in the outer buffer. Gradient variables can further increase missingness because gradients require valid neighboring-cell context.
+
+This incomplete seascape coverage is therefore a data-availability mask, not a date-key mismatch. The seascape tables are internally valid: all seascape-assigned `h3`/`date` keys match the feature grid, but some feature-grid keys are intentionally absent from the seascape products because the feature vector was incomplete.
+
+Possible report wording:
+
+> Environmental seascape assignments were restricted to H3-day cells with complete predictor vectors. Unassigned cells occurred primarily in land-masked, coastal, or outer-buffer areas where chlorophyll-a, sea-surface height, wind, or derived gradient fields were unavailable. These exclusions did not reflect date-key mismatches; join-integrity checks confirmed complete alignment between the environmental source table and the model feature grid.

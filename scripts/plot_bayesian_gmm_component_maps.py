@@ -15,6 +15,7 @@ from matplotlib.axes import Axes
 from matplotlib import colors
 from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
+from matplotlib import colormaps
 import pandas as pd
 from typing import Any, cast
 
@@ -50,13 +51,46 @@ COMPONENT_COLORS = {
 }
 
 
+def extended_class_colors(n_classes: int) -> dict[int, str]:
+    """Return a stable discrete color lookup for component classes."""
+    color_lookup = dict(COMPONENT_COLORS)
+    palettes = ["tab20", "tab20b", "tab20c"]
+    colors_needed = max(0, n_classes - len(color_lookup))
+
+    if colors_needed == 0:
+        return color_lookup
+
+    generated: list[str] = []
+    for palette_name in palettes:
+        cmap = colormaps[palette_name]
+        generated.extend(
+            colors.to_hex(cmap(i / cmap.N))
+            for i in range(cmap.N)
+        )
+
+    for component in range(len(color_lookup), n_classes):
+        color_lookup[component] = generated[
+            (component - len(COMPONENT_COLORS)) % len(generated)
+        ]
+
+    return color_lookup
+
+
+def component_colors(components: list[int]) -> dict[int, str]:
+    """Return colors for the observed components."""
+    if not components:
+        return {}
+    return extended_class_colors(max(components) + 1)
+
+
 def draw_component_colorbar(fig: Any, cax: Axes, components: list[int]) -> None:
     """Draw a discrete component color bar matching the risk-map style."""
     if not components:
         cax.axis("off")
         return
 
-    cmap = colors.ListedColormap([COMPONENT_COLORS[component] for component in components])
+    lookup = component_colors(components)
+    cmap = colors.ListedColormap([lookup[component] for component in components])
     boundaries = list(range(len(components) + 1))
     ticks = [idx + 0.5 for idx in range(len(components))]
     norm = colors.BoundaryNorm(boundaries, cmap.N)
@@ -76,19 +110,20 @@ def draw_component_colorbar(fig: Any, cax: Axes, components: list[int]) -> None:
         cast(Any, cbar.solids).set_edgecolor("face")
 
 
-def component_path(year: int) -> Path:
+def component_path(year: int, input_root: Path) -> Path:
     """Return component-assignment partition path for a year."""
-    return INPUT_ROOT / f"year={year}" / "part.parquet"
+    return input_root / f"year={year}" / "part.parquet"
 
 
 def dominant_components(
     year: int,
     model_name: str,
     product_name: str,
+    input_root: Path,
 ) -> pd.DataFrame:
     """Return dominant component per H3 cell from environmental features."""
     _ = (model_name, product_name)
-    component_file = component_path(year)
+    component_file = component_path(year, input_root)
 
     if not component_file.exists():
         raise FileNotFoundError(
@@ -146,10 +181,11 @@ def monthly_dominant_components(
     year: int,
     model_name: str,
     product_name: str,
+    input_root: Path,
 ) -> pd.DataFrame:
     """Return dominant component by month/H3 from environmental features."""
     _ = (model_name, product_name)
-    component_file = component_path(year)
+    component_file = component_path(year, input_root)
 
     if not component_file.exists():
         raise FileNotFoundError(
@@ -228,8 +264,9 @@ def plot_component_panel(
     plot_gdf = grid.merge(summary, on="h3", how="left")
     plot_gdf = plot_gdf.dropna(subset=["dominant_component"]).copy()
     plot_gdf["dominant_component"] = plot_gdf["dominant_component"].astype(int)
+    lookup = component_colors(plot_gdf["dominant_component"].unique().tolist())
     plot_gdf["component_color"] = plot_gdf["dominant_component"].map(
-        COMPONENT_COLORS
+        lookup
     )
 
     if not plot_gdf.empty:
@@ -325,8 +362,9 @@ def plot_month_panel(
     else:
         plot_gdf = grid.merge(month_values, on="h3", how="inner")
         plot_gdf["dominant_component"] = plot_gdf["dominant_component"].astype(int)
+        lookup = component_colors(plot_gdf["dominant_component"].unique().tolist())
         plot_gdf["component_color"] = plot_gdf["dominant_component"].map(
-            COMPONENT_COLORS
+            lookup
         )
 
     if not plot_gdf.empty:
@@ -431,6 +469,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=MODEL_NAME, help=argparse.SUPPRESS)
     parser.add_argument("--product", default=PRODUCT_NAME, help=argparse.SUPPRESS)
     parser.add_argument(
+        "--input-root",
+        type=Path,
+        default=INPUT_ROOT,
+        help="Directory containing component assignment year=*/part.parquet files.",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=OUTPUT_ROOT,
@@ -459,6 +503,7 @@ def main() -> int:
         year=args.year,
         model_name=args.model,
         product_name=args.product,
+        input_root=args.input_root,
     )
     summary_file = (
         args.data_output_root
@@ -483,6 +528,7 @@ def main() -> int:
             year=args.year,
             model_name=args.model,
             product_name=args.product,
+            input_root=args.input_root,
         )
         monthly_file = (
             args.data_output_root

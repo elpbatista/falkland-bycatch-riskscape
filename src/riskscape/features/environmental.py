@@ -12,6 +12,7 @@ import pandas as pd
 import xarray as xr
 
 from riskscape.config import cfg, paths
+from riskscape.utils.dates import normalize_date_column, utc_day
 
 
 logger = logging.getLogger(__name__)
@@ -105,14 +106,7 @@ def feature_name(dataset_name, variable_name, configured):
 
 def timestamp_utc_day(value):
     """Return UTC-normalized daily timestamp."""
-    ts = pd.Timestamp(value)
-
-    if ts.tzinfo is None:
-        ts = ts.tz_localize("UTC")
-    else:
-        ts = ts.tz_convert("UTC")
-
-    return ts.floor("D")
+    return utc_day(value)
 
 
 def aggregate_slice(values, lookup, col):
@@ -210,7 +204,7 @@ def merge_frames(frames):
     )
 
     df["h3"] = df["h3"].astype("uint64")
-    df["date"] = pd.to_datetime(df["date"], utc=True)
+    df = normalize_date_column(df)
 
     for c in feature_cols:
         df[c] = df[c].astype("float32")
@@ -227,6 +221,7 @@ def write_year(df, year):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = out_dir / "part.parquet"
+    df = normalize_date_column(df)
     df.to_parquet(out_file, index=False, compression="zstd")
 
     return out_file

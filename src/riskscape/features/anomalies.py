@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.utils.dates import normalize_date_column
 
 
 def load_partitioned(table: str) -> list[tuple[int, Path]]:
@@ -27,7 +28,7 @@ def load_all(parts: list[tuple[int, Path]]) -> pd.DataFrame:
     frames = []
 
     for _, path in parts:
-        frames.append(pd.read_parquet(path))
+        frames.append(normalize_date_column(pd.read_parquet(path)))
 
     return pd.concat(frames, ignore_index=True)
 
@@ -62,6 +63,7 @@ def add_anomalies(df: pd.DataFrame) -> pd.DataFrame:
 def write_partitions(df: pd.DataFrame, parts: list[tuple[int, Path]]) -> None:
     for year, path in parts:
         df_year = df[df["date"].dt.year == year]
+        df_year = normalize_date_column(df_year)
 
         df_year.to_parquet(path, index=False, compression="zstd")
 
@@ -73,7 +75,7 @@ def process_environmental_anomalies() -> None:
 
     df = load_all(parts)
 
-    df["date"] = pd.to_datetime(df["date"])
+    df = normalize_date_column(df)
 
     df = add_anomalies(df)
 

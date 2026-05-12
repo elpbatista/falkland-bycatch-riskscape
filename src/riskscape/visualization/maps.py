@@ -31,6 +31,11 @@ MINIMUM_EFFORT_UNIT = 0.5
 # Computed as the 99.5th percentile of annual H3-level non-zero mean
 # species-use values across the full 2014-2023 joint prediction dataset.
 SPECIES_USE_LOG_COLOR_MAX = 1.5
+SPECIES_USE_LOG_ZERO = float(np.log1p(0.0))
+
+# Minimum displayed log-transformed residence index. This removes the weak
+# positive background produced by tree models while preserving true hotspots.
+SPECIES_USE_LOG_MIN_DISPLAY = 0.1
 
 
 @dataclass(frozen=True)
@@ -283,7 +288,7 @@ def summarize_hazard_h3(
     agg_name = aggregation_name(agg)
 
     if agg_name == "mean":
-        out = out[out["species_use_log_pred"] > 0].copy()
+        out = out[out["species_use_log_pred"] > SPECIES_USE_LOG_ZERO].copy()
 
     if out.empty:
         raise ValueError("No positive species-use prediction rows found")
@@ -294,6 +299,11 @@ def summarize_hazard_h3(
         value_col="species_use_log_pred",
         agg=agg_name,
     )
+    grouped = grouped[grouped[species_use_col] > SPECIES_USE_LOG_MIN_DISPLAY].copy()
+
+    if grouped.empty:
+        raise ValueError("No positive species-use H3 summaries found")
+
     grouped["hazard_log_pred"] = (
         grouped[species_use_col] + np.log1p(minimum_effort_unit)
     )
