@@ -43,13 +43,15 @@ BalanceMode = Literal["before", "after", "none"]
 
 RANDOM_STATE = base_train.RANDOM_STATE
 # Blocked validation commonly uses smaller holdouts than the production random
-# 75/25 split. A 12% holdout sits near the middle of the 10-20% range often used
-# for blockCV-style diagnostics while leaving more training data available.
-DEFAULT_TEST_FRACTION = 0.12
+# 75/25 split. A 10% target holdout follows the lower end of the 10-20% range
+# often used for blockCV-style diagnostics while preserving training support.
+DEFAULT_TEST_FRACTION = 0.10
 DEFAULT_BLOCK_RESOLUTION = 4
 DEFAULT_BUFFER_RINGS = 1
-DEFAULT_SEASCAPE_TABLE = "seascapes/kmeans_k30"
-DEFAULT_COMPONENT_TABLE = "cube_components_random12_bayesian_gmm_k30"
+DEFAULT_CV_FOLDS = 1
+DEFAULT_ENVIRONMENTAL_REGIME_TABLE = "environmental_regimes"
+DEFAULT_SEASCAPE_TABLE = DEFAULT_ENVIRONMENTAL_REGIME_TABLE
+DEFAULT_COMPONENT_TABLE = DEFAULT_ENVIRONMENTAL_REGIME_TABLE
 
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
 MODEL_DIR = paths["data"] / "modeling" / "models" / "block_cv"
@@ -78,6 +80,11 @@ def load_partitioned_table(name: str, columns: list[str] | None = None) -> pd.Da
         raise FileNotFoundError(f"No data found for modeling table: {name}")
 
     return pd.concat(frames, ignore_index=True)
+
+
+def scalar_int(value: Any) -> int:
+    """Return an int from a pandas scalar value."""
+    return int(cast(Any, value))
 
 
 def load_years_table(
@@ -141,13 +148,16 @@ def add_gmm_components(df: pd.DataFrame, component_table: str) -> pd.DataFrame:
     components = load_years_table(
         component_table,
         years,
-        columns=["h3", "date", "species", "component"],
+        columns=["h3", "date", "bayesian_gmm_k30_component"],
     )
-    components = components.drop_duplicates(["h3", "date", "species"])
+    components = components.drop_duplicates(["h3", "date"])
+    components = components.rename(
+        columns={"bayesian_gmm_k30_component": "component"}
+    )
 
     out = df.merge(
         components,
-        on=["h3", "date", "species"],
+        on=["h3", "date"],
         how="left",
         validate="many_to_one",
     )
@@ -166,9 +176,10 @@ def add_seascapes(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     seascapes = load_years_table(
         table_name,
         years,
-        columns=["h3", "date", "seascape"],
+        columns=["h3", "date", "kmeans_k15"],
     )
     seascapes = seascapes.drop_duplicates(["h3", "date"])
+    seascapes = seascapes.rename(columns={"kmeans_k15": "seascape"})
 
     out = df.merge(
         seascapes,
@@ -311,6 +322,135 @@ def split_table(
     return split_by_group(df, split, test_fraction)
 
 
+def fold_group_assignments(
+    df: pd.DataFrame,
+    n_folds: int,
+) -> dict[str, int]:
+    """Assign complete block groups to row- and species-support-balanced folds."""
+    if "_block_group" not in df.columns:
+        raise ValueError("Cross-validation folds require _block_group labels")
+    if n_folds < 2:
+        raise ValueError("--cv-folds must be at least 2")
+
+    species_values = sorted(str(value) for value in df["species"].unique())
+    group_stats = (
+        df
+        .assign(_positive=df[SPECIES_TARGET] > 0)
+        .pivot_table(
+            index="_block_group",
+            columns="species",
+            values="_positive",
+            aggfunc="sum",
+            fill_value=0,
+            observed=True,
+        )
+    )
+    group_stats = group_stats.reindex(columns=species_values, fill_value=0)
+    group_stats["rows"] = df["_block_group"].value_counts()
+    group_stats["positive_total"] = group_stats[species_values].sum(axis=1)
+    group_stats["positive_min"] = group_stats[species_values].min(axis=1)
+
+    if len(group_stats) < n_folds:
+        raise ValueError(
+            f"Cannot create {n_folds} folds from {len(group_stats)} block groups"
+        )
+
+    shuffled = group_stats.sample(frac=1.0, random_state=RANDOM_STATE)
+    ordered_groups = shuffled.sort_values(
+        ["positive_min", "positive_total", "rows"],
+        ascending=[False, False, False],
+    )
+
+    fold_rows = [0] * n_folds
+    fold_counts = [0] * n_folds
+    fold_positive = [
+        {species: 0 for species in species_values}
+        for _ in range(n_folds)
+    ]
+    target_rows = len(df) / n_folds
+    target_positive = {
+        species: max(float(df.loc[
+            (df["species"] == species) & (df[SPECIES_TARGET] > 0)
+        ].shape[0]) / n_folds, 1.0)
+        for species in species_values
+    }
+    max_groups_per_fold = int(np.ceil(len(group_stats) / n_folds))
+    assignments: dict[str, int] = {}
+
+    def fold_score(test_fold: int, group: str) -> float:
+        rows = fold_rows.copy()
+        counts = fold_counts.copy()
+        positives = [values.copy() for values in fold_positive]
+
+        rows[test_fold] += scalar_int(group_stats.loc[group, "rows"])
+        counts[test_fold] += 1
+        for species in species_values:
+            positives[test_fold][species] += scalar_int(
+                group_stats.loc[group, species]
+            )
+
+        row_score = float(np.std(rows) / max(target_rows, 1.0))
+        count_score = float(np.std(counts) / max(max_groups_per_fold, 1))
+        positive_score = 0.0
+        missing_penalty = 0.0
+
+        for species in species_values:
+            values = np.array(
+                [fold_values[species] for fold_values in positives],
+                dtype="float64",
+            )
+            positive_score += float(
+                np.std(values) / target_positive[species]
+            )
+            missing_penalty += float((values == 0).sum())
+
+        return row_score + positive_score + count_score + (10.0 * missing_penalty)
+
+    for group in ordered_groups.index:
+        available = [
+            fold
+            for fold in range(n_folds)
+            if fold_counts[fold] < max_groups_per_fold
+        ]
+        fold = min(available, key=lambda idx: fold_score(idx, str(group)))
+        assignments[str(group)] = fold
+        fold_rows[fold] += scalar_int(group_stats.loc[group, "rows"])
+        fold_counts[fold] += 1
+        for species in species_values:
+            fold_positive[fold][species] += scalar_int(
+                group_stats.loc[group, species]
+            )
+
+    return assignments
+
+
+def split_cv_fold(
+    df: pd.DataFrame,
+    split: str,
+    fold_assignments: dict[str, int],
+    fold: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, SplitSummary]:
+    """Split one cross-validation fold using complete block groups."""
+    heldout = sorted(
+        group
+        for group, group_fold in fold_assignments.items()
+        if group_fold == fold
+    )
+    heldout_set = set(heldout)
+    test_mask = df["_block_group"].isin(heldout_set)
+
+    train = df.loc[~test_mask].copy()
+    test = df.loc[test_mask].copy()
+    summary = SplitSummary(
+        split=split,
+        heldout_groups=",".join(heldout),
+        train_rows=len(train),
+        test_rows=len(test),
+    )
+
+    return train, test, summary
+
+
 def balance_tables(
     df: pd.DataFrame,
     split: SplitName,
@@ -336,6 +476,14 @@ def balance_tables(
         )
 
     return train, test, summary
+
+
+def cv_base_table(df: pd.DataFrame, balance: BalanceMode) -> pd.DataFrame:
+    """Return the base table used for grouped cross-validation."""
+    if balance == "before":
+        return base_train.sample_training_rows(df)
+
+    return df.copy()
 
 
 def split_diagnostics(
@@ -535,6 +683,55 @@ def train_joint_models(
     return rows
 
 
+def train_joint_models_cv(
+    df: pd.DataFrame,
+    model_names: list[str],
+    split: SplitName,
+    n_folds: int,
+    balance: BalanceMode,
+    save_models: bool,
+) -> list[dict]:
+    """Train joint-species models with grouped cross-validation folds."""
+    cv_df = cv_base_table(df, balance)
+    fold_assignments = fold_group_assignments(cv_df, n_folds)
+    rows = []
+
+    for fold in range(n_folds):
+        train, test, summary = split_cv_fold(
+            cv_df,
+            split=split,
+            fold_assignments=fold_assignments,
+            fold=fold,
+        )
+
+        if balance == "after":
+            train = base_train.sample_training_rows(train)
+            summary = SplitSummary(
+                split=summary.split,
+                heldout_groups=summary.heldout_groups,
+                train_rows=len(train),
+                test_rows=len(test),
+                excluded_buffer_rows=summary.excluded_buffer_rows,
+            )
+
+        for model_name in model_names:
+            row = train_and_evaluate(
+                train=train,
+                test=test,
+                model_name=model_name,
+                split_summary=summary,
+                model_type="joint_species",
+                species_name="all",
+                save_models=save_models,
+            )
+            row["cv_fold"] = fold + 1
+            row["cv_folds"] = n_folds
+            row["actual_test_fraction"] = len(test) / (len(train) + len(test))
+            rows.append(row)
+
+    return rows
+
+
 def train_single_species_models(
     df: pd.DataFrame,
     model_names: list[str],
@@ -583,6 +780,38 @@ def save_metrics(rows: list[dict], split: SplitName, run_label: str | None) -> P
     return path
 
 
+def save_cv_summary(rows: list[dict], split: SplitName, run_label: str | None) -> Path:
+    """Save mean and standard-deviation summary for grouped CV metrics."""
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = f"_{run_label}" if run_label else ""
+    path = METRICS_DIR / f"species_model_{split}{suffix}_block_cv_summary.csv"
+    df = pd.DataFrame(rows)
+    metric_cols = [
+        "r2",
+        "rmse",
+        "mae",
+        "r2_log",
+        "rmse_log",
+        "mae_log",
+        "actual_test_fraction",
+    ]
+    summary = (
+        df
+        .groupby(["model", "model_type", "species"], as_index=False)
+        .agg(
+            cv_folds=("cv_fold", "count"),
+            **{
+                f"{col}_{stat}": (col, stat)
+                for col in metric_cols
+                for stat in ["mean", "std"]
+            },
+        )
+    )
+    summary.to_csv(path, index=False)
+    print("CV summary saved:", path)
+    return path
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -617,6 +846,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--block-resolution", type=int, default=DEFAULT_BLOCK_RESOLUTION)
     parser.add_argument("--buffer-rings", type=int, default=DEFAULT_BUFFER_RINGS)
+    parser.add_argument(
+        "--cv-folds",
+        type=int,
+        default=DEFAULT_CV_FOLDS,
+        help=(
+            "Number of grouped cross-validation folds. Use 1 for the existing "
+            "single holdout split."
+        ),
+    )
     parser.add_argument("--component-table", default=DEFAULT_COMPONENT_TABLE)
     parser.add_argument("--seascape-table", default=DEFAULT_SEASCAPE_TABLE)
     parser.add_argument(
@@ -676,14 +914,32 @@ def train_models() -> Path:
     rows: list[dict] = []
 
     if args.diagnostics_only:
-        train, test, summary = balance_tables(
-            df,
-            split,
-            args.test_fraction,
-            args.buffer_rings,
-            balance,
-        )
-        diagnostics = split_diagnostics(train, test, summary)
+        if args.cv_folds > 1:
+            cv_df = cv_base_table(df, balance)
+            fold_assignments = fold_group_assignments(cv_df, args.cv_folds)
+            diagnostics = pd.concat(
+                [
+                    split_diagnostics(
+                        *split_cv_fold(
+                            cv_df,
+                            split=split,
+                            fold_assignments=fold_assignments,
+                            fold=fold,
+                        )
+                    ).assign(cv_fold=fold + 1)
+                    for fold in range(args.cv_folds)
+                ],
+                ignore_index=True,
+            )
+        else:
+            train, test, summary = balance_tables(
+                df,
+                split,
+                args.test_fraction,
+                args.buffer_rings,
+                balance,
+            )
+            diagnostics = split_diagnostics(train, test, summary)
         save_diagnostics(
             diagnostics,
             split,
@@ -699,6 +955,23 @@ def train_models() -> Path:
                 "block_group_diagnostics",
             )
         return METRICS_DIR / "diagnostics_only"
+
+    if args.cv_folds > 1:
+        if args.model_type != "joint":
+            raise ValueError("Grouped CV currently supports --model-type joint")
+        rows.extend(
+            train_joint_models_cv(
+                df=df,
+                model_names=model_names,
+                split=split,
+                n_folds=args.cv_folds,
+                balance=balance,
+                save_models=args.save_models,
+            )
+        )
+        path = save_metrics(rows, split, args.run_label)
+        save_cv_summary(rows, split, args.run_label)
+        return path
 
     if args.model_type in {"joint", "both"}:
         rows.extend(

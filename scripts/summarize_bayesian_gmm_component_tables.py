@@ -59,7 +59,7 @@ def species_training_path(year: int) -> Path:
 
 def component_assignment_path(year: int) -> Path:
     """Return component-assignment partition path."""
-    return modeling_root("cube_components") / f"year={year}" / "part.parquet"
+    return modeling_root("environmental_regimes") / f"year={year}" / "part.parquet"
 
 
 def load_observed_species_components() -> pd.DataFrame:
@@ -92,15 +92,20 @@ def load_observed_species_components() -> pd.DataFrame:
             columns=[
                 "h3",
                 "date",
-                "species",
-                "component",
-                "component_probability",
+                "bayesian_gmm_k30_component",
+                "bayesian_gmm_k30_component_probability",
             ],
+        )
+        components = components.rename(
+            columns={
+                "bayesian_gmm_k30_component": "component",
+                "bayesian_gmm_k30_component_probability": "component_probability",
+            }
         )
 
         joined = observed.merge(
             components,
-            on=["h3", "date", "species"],
+            on=["h3", "date"],
             how="inner",
         )
         joined["year"] = year

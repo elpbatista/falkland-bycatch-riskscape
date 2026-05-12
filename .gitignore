@@ -54,6 +54,9 @@ logs/
 */dev/
 plots/*.csv
 plots/**/*.csv
+plots/predictions/weekly_operator/*.mp4
+plots/predictions/weekly_operator/*.gif
+plots/predictions/weekly_operator/frames/
 
 # Keep
 !src/

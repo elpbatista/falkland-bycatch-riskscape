@@ -30,7 +30,7 @@ from riskscape.visualization.maps import (
 
 
 YEAR = 2022
-MODEL_NAME = "kmeans_k10"
+MODEL_NAME = "kmeans_k15"
 PREDICTION_MODEL = (
     "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
 )
@@ -43,7 +43,7 @@ SOFT_TEMPERATURE_SCALE = 0.35
 
 SURFACE_ROOT = paths["data"] / "modeling" / "seascape_species_use"
 FEATURE_GRID_ROOT = paths["data"] / "modeling" / "feature_grid"
-SEASCAPE_ROOT = paths["data"] / "modeling" / "seascapes"
+SEASCAPE_ROOT = paths["data"] / "modeling" / "environmental_regimes"
 SEASCAPE_MODEL_ROOT = paths["data"] / "modeling" / "models" / "seascapes"
 SEASCAPE_SUMMARY_ROOT = paths["data"] / "plot_exports" / "seascapes"
 FISHING_ROOT = paths["data"] / "modeling" / "fishing_training"
@@ -192,8 +192,8 @@ def feature_grid_path(year: int) -> Path:
 
 
 def seascape_assignment_path(year: int, model_name: str) -> Path:
-    """Return hard seascape assignment path for one year."""
-    return SEASCAPE_ROOT / model_name / f"year={year}" / "part.parquet"
+    """Return compact environmental-regime assignment path for one year."""
+    return SEASCAPE_ROOT / f"year={year}" / "part.parquet"
 
 
 def seascape_model_path(model_name: str) -> Path:
@@ -272,7 +272,7 @@ def soft_membership_temperature(year: int, model_name: str) -> float:
 
     with duckdb.connect(database=":memory:") as con:
         value = con.execute(
-            "SELECT median(seascape_distance) FROM read_parquet($path)",
+            "SELECT median(kmeans_k15_distance) FROM read_parquet($path)",
             {"path": str(path)},
         ).fetchone()[0]
 

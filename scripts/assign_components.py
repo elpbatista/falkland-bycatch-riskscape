@@ -129,21 +129,6 @@ def drop_invalid_feature_rows(
     return out.loc[~mask].reset_index(drop=True)
 
 
-def add_species_rows(
-    batch: pd.DataFrame,
-    payload: dict,
-) -> pd.DataFrame:
-    """Expand one feature-grid batch to all species known by the model."""
-    frames = []
-
-    for species in model_species(payload):
-        out = batch.copy()
-        out["species"] = species
-        frames.append(out)
-
-    return pd.concat(frames, ignore_index=True)
-
-
 def component_entropy(proba: np.ndarray) -> np.ndarray:
     """Compute normalized component entropy."""
     eps = 1e-12
@@ -255,7 +240,6 @@ def process_batch(
         [
             "h3",
             "date",
-            "species",
         ]
     ].copy()
 
@@ -285,7 +269,6 @@ def assign_year(payload: dict, year: int, out_root: Path) -> Path:
     frames = []
 
     for batch in iter_batches(feature_grid, BATCH_ROWS):
-        batch = add_species_rows(batch, payload)
         frames.append(
             process_batch(batch, payload)
         )

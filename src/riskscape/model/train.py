@@ -37,6 +37,7 @@ MAX_POSITIVE_ROWS = None
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
+ACTIVE_EXTRA_TREES_MODEL_NAME = "extra_trees_kmeans_k15_blockcv"
 
 GMM_COMPONENTS = 30
 GMM_REG_COVAR = 1e-6
@@ -402,6 +403,71 @@ def train_joint_species_model(
 
     print("Joint species model:", model_name)
     print(m)
+
+    return m
+
+
+def train_production_extra_trees_model() -> dict:
+    """Train the active Extra Trees joint model on all balanced rows."""
+    df = sample_training_rows(prepare_species_table())
+
+    x_num = df[FEATURES].to_numpy()
+    y = df["_y"]
+    enc = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+    x_species = enc.fit_transform(df[["species"]])
+    x = np.hstack([x_species, x_num])
+
+    model = build_extra_trees()
+    model.fit(
+        x,
+        y,
+        sample_weight=sample_weights(y),
+    )
+
+    pred_log = model.predict(x)
+    m = evaluate_predictions(y, pred_log)
+    log_m = metrics(y, pred_log)
+    m.update(
+        {
+            "r2_log": log_m["r2"],
+            "rmse_log": log_m["rmse"],
+            "mae_log": log_m["mae"],
+            "model": ACTIVE_EXTRA_TREES_MODEL_NAME,
+            "base_model": "extra_trees",
+            "model_type": "joint_species",
+            "species": "all",
+            "train_rows": int(len(df)),
+            "test_rows": 0,
+            "validation": "production_all_balanced_rows",
+        }
+    )
+
+    payload = {
+        "model": model,
+        "encoder": enc,
+        "features": FEATURES,
+        "target": SPECIES_TARGET,
+        "log_target": True,
+        "model_name": ACTIVE_EXTRA_TREES_MODEL_NAME,
+        "base_model": "extra_trees",
+        "model_type": "joint_species",
+        "species": "all",
+        "validation": "production_all_balanced_rows",
+    }
+
+    model_dir = MODEL_DIR / ACTIVE_EXTRA_TREES_MODEL_NAME
+    save_payload(
+        payload,
+        model_dir / "species_model_joint.joblib",
+    )
+
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+    metrics_path = METRICS_DIR / f"species_model_{ACTIVE_EXTRA_TREES_MODEL_NAME}_production_metrics.csv"
+    pd.DataFrame([m]).to_csv(metrics_path, index=False)
+
+    print("Production joint species model:", ACTIVE_EXTRA_TREES_MODEL_NAME)
+    print(m)
+    print("Metrics saved:", metrics_path)
 
     return m
 

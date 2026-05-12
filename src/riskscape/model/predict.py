@@ -580,7 +580,9 @@ def build_hybrid_product_predictions(
         )
 
         plausibility_values = out["plausibility"].to_numpy(dtype="float32")
-        out["hybrid_alpha"] = presence_gate(plausibility_values, out["species"])
+        gate = presence_gate(plausibility_values, out["species"])
+        out["hybrid_alpha"] = gate
+        out["plausibility_gate"] = gate
         out["species_use_log_pred"] = apply_presence_gate(
             out["species_use_ml_log_pred"].to_numpy(dtype="float32"),
             plausibility_values,
@@ -641,8 +643,10 @@ def build_hybrid_species_predictions(
         if HYBRID_MODE == "presence_gate":
             ml_pred = predict_species(out, ml_payload)
             plausibility = predict_plausibility(out, bayesian_payload)
+            gate = presence_gate(plausibility, out["species"])
 
-            out["hybrid_alpha"] = plausibility
+            out["hybrid_alpha"] = gate
+            out["plausibility_gate"] = gate
             out["species_use_ml_log_pred"] = ml_pred
             out["plausibility"] = plausibility
             out["species_use_log_pred"] = apply_presence_gate(
@@ -700,6 +704,7 @@ def output_columns(model_name: str) -> list[str]:
         cols.insert(5, "species_use_ml_log_pred")
         if HYBRID_MODE == "presence_gate":
             cols.insert(6, "plausibility")
+            cols.insert(7, "plausibility_gate")
         else:
             cols.insert(6, "species_use_bayesian_log_pred")
 

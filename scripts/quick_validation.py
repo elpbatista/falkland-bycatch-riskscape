@@ -1,4 +1,6 @@
 
+from zipfile import Path
+
 import pandas as pd
 from riskscape.model.dataset import SPECIES_TARGET
 
@@ -27,6 +29,9 @@ from riskscape.config import paths
 # )
 path = paths["data"] / "modeling" / "fishing_training" / "year=2022" / "part.parquet"
 # path = paths["data"] / "features" / "environmental" / "year=2022" / "part.parquet"
+
+path = paths["data"] / "modeling" / "predictions" / "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30" / "joint" / "year=2022" / "part.parquet"
+
 df = pd.read_parquet(path)
 
 
@@ -74,3 +79,6 @@ print(df.columns.tolist())
 # print(df["date"].dtype)
 # print(type(df["date"].iloc[0]))
 # print(df["date"].head())
+
+print(df[["plausibility", "plausibility_gate", "hybrid_alpha"]].describe())
+

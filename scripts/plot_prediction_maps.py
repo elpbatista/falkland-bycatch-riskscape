@@ -120,26 +120,34 @@ def load_aggregated_predictions(
     plausibility_agg: str,
 ) -> pd.DataFrame:
     """Load annual H3-level prediction summaries from parquet."""
-    species_sql = ", ".join(f"'{species}'" for species in species_values)
     species_use_expr = aggregate_expression("species_use_log_pred", agg)
     risk_expr = aggregate_expression("risk_log_pred", agg)
     plausibility_expr = aggregate_expression("plausibility", plausibility_agg)
-
-    query = f"""
-        SELECT
-            h3,
-            species,
-            {species_use_expr}::FLOAT AS species_use_log_pred,
-            {risk_expr}::FLOAT AS risk_log_pred,
-            {plausibility_expr}::FLOAT AS plausibility
-        FROM read_parquet($path, hive_partitioning=false)
-        WHERE species IN ({species_sql})
-        GROUP BY h3, species
-    """
+    frames = []
 
     with duckdb.connect(database=":memory:") as con:
-        out = con.execute(query, {"path": str(path)}).fetchdf()
+        con.execute("PRAGMA temp_directory='/private/tmp/duckdb'")
+        con.execute("PRAGMA memory_limit='4GB'")
+        for species in species_values:
+            query = f"""
+                SELECT
+                    h3,
+                    species,
+                    {species_use_expr}::FLOAT AS species_use_log_pred,
+                    {risk_expr}::FLOAT AS risk_log_pred,
+                    {plausibility_expr}::FLOAT AS plausibility
+                FROM read_parquet($path, hive_partitioning=false)
+                WHERE species = $species
+                GROUP BY h3, species
+            """
+            frames.append(
+                con.execute(
+                    query,
+                    {"path": str(path), "species": species},
+                ).fetchdf()
+            )
 
+    out = pd.concat(frames, ignore_index=True)
     out["h3"] = out["h3"].astype("uint64")
     return out
 

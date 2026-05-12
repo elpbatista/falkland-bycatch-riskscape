@@ -31,9 +31,13 @@ from riskscape.visualization.base_map import (
 
 
 YEAR = 2022
-MODEL_NAME = "bayesian_gmm"
+MODEL_NAME = "bayesian_gmm_k30"
 PRODUCT_NAME = "joint"
-INPUT_ROOT = paths["data"] / "modeling" / "cube_components"
+INPUT_ROOT = (
+    paths["data"]
+    / "modeling"
+    / "environmental_regimes"
+)
 OUTPUT_ROOT = paths["plots"] / "plausibility"
 DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "plausibility"
 
@@ -135,9 +139,9 @@ def dominant_components(
             SELECT DISTINCT
                 CAST(h3 AS UBIGINT) AS h3,
                 date,
-                component,
-                component_probability,
-                component_entropy
+                bayesian_gmm_k30_component AS component,
+                bayesian_gmm_k30_component_probability AS component_probability,
+                bayesian_gmm_k30_component_entropy AS component_entropy
             FROM read_parquet(?)
         ),
         counts AS (
@@ -197,9 +201,9 @@ def monthly_dominant_components(
             SELECT DISTINCT
                 CAST(h3 AS UBIGINT) AS h3,
                 date,
-                component,
-                component_probability,
-                component_entropy
+                bayesian_gmm_k30_component AS component,
+                bayesian_gmm_k30_component_probability AS component_probability,
+                bayesian_gmm_k30_component_entropy AS component_entropy
             FROM read_parquet(?)
         ),
         counts AS (

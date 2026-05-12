@@ -535,10 +535,11 @@ def draw_prediction_colorbar(
     value_col: str,
     norm: colors.Normalize,
     style: MapStyle,
+    cax=None,
 ) -> None:
     """Draw a compact low/high colorbar."""
     if style.colorbar_labels is not None:
-        draw_labeled_colorbar(ax, value_col, norm, style)
+        draw_labeled_colorbar(ax, value_col, norm, style, cax=cax)
         return
 
     draw_compact_colorbar(
@@ -567,6 +568,7 @@ def draw_labeled_colorbar(
     value_col: str,
     norm: colors.Normalize,
     style: MapStyle,
+    cax=None,
 ) -> None:
     """Draw a discrete colorbar with category labels."""
     if not isinstance(norm, colors.BoundaryNorm):
@@ -578,17 +580,28 @@ def draw_labeled_colorbar(
     if style.color_scale == "log":
         ticks = np.sqrt(boundaries[:-1] * boundaries[1:])
 
+    colorbar_kwargs = {
+        "label": colorbar_title(style, value_col),
+        "ticks": ticks,
+        "spacing": "uniform",
+        "drawedges": True,
+    }
+    if cax is None:
+        colorbar_kwargs.update(
+            {
+                "ax": ax,
+                "shrink": 0.28,
+                "aspect": len(style.colorbar_labels),
+                "pad": 0.02,
+                "fraction": 0.035,
+            }
+        )
+    else:
+        colorbar_kwargs["cax"] = cax
+
     cbar = ax.figure.colorbar(
         ScalarMappable(norm=norm, cmap=style_colormap(style)),
-        ax=ax,
-        label=colorbar_title(style, value_col),
-        ticks=ticks,
-        spacing="uniform",
-        shrink=0.28,
-        aspect=len(style.colorbar_labels),
-        pad=0.02,
-        fraction=0.035,
-        drawedges=True,
+        **colorbar_kwargs,
     )
     cbar.outline.set_visible(True)
     cbar.outline.set_edgecolor("#8a8a8a")
