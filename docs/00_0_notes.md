@@ -317,3 +317,5 @@ This incomplete seascape coverage is therefore a data-availability mask, not a d
 Possible report wording:
 
 > Environmental seascape assignments were restricted to H3-day cells with complete predictor vectors. Unassigned cells occurred primarily in land-masked, coastal, or outer-buffer areas where chlorophyll-a, sea-surface height, wind, or derived gradient fields were unavailable. These exclusions did not reflect date-key mismatches; join-integrity checks confirmed complete alignment between the environmental source table and the model feature grid.
+
+NOAA CoastWatch, Oregon State University, University of South Florida, NASA, University of Alaska Fairbanks, IOOS, NMS. (2025). Global Seascapes 8DAY: Prototype [Dataset]. NOAA CoastWatch. <https://cwcgom.aoml.noaa.gov/thredds/dodsC/SEASCAPE\_8DAY/SEASCAPES.nc.html>
