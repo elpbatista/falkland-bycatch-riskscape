@@ -36,6 +36,11 @@ MODEL_NAME = "kmeans_k10"
 INPUT_ROOT = paths["data"] / "modeling" / "seascapes"
 OUTPUT_ROOT = paths["plots"] / "seascapes"
 DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "seascapes"
+CLASS_COLUMN = "seascape"
+SCORE_COLUMN = "seascape_distance"
+SCORE_ORDER = "asc"
+FILE_PREFIX = "monthly_dominant_kmeans_seascapes"
+TITLE_LABEL = "k-means Seascapes"
 
 SEASCAPE_COLORS = {
     0: "#4e79a7",
@@ -115,32 +120,75 @@ def seascape_path(year: int, model_name: str) -> Path:
     return INPUT_ROOT / model_name / f"year={year}" / "part.parquet"
 
 
-def monthly_dominant_seascapes(year: int, model_name: str) -> pd.DataFrame:
+def assignment_path(year: int, model_name: str, assignment_table: str | None) -> Path:
+    """Return seascape assignment partition path for one year."""
+    if assignment_table:
+        return (
+            paths["data"]
+            / "modeling"
+            / assignment_table
+            / f"year={year}"
+            / "part.parquet"
+        )
+
+    return seascape_path(year, model_name)
+
+
+def quote_identifier(name: str) -> str:
+    """Return a DuckDB-safe identifier."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def monthly_dominant_seascapes(
+    year: int,
+    model_name: str,
+    assignment_table: str | None = None,
+    class_column: str = CLASS_COLUMN,
+    score_column: str | None = SCORE_COLUMN,
+    score_order: str = SCORE_ORDER,
+    drop_class: list[int] | None = None,
+) -> pd.DataFrame:
     """Return dominant seascape by month/H3."""
-    seascape_file = seascape_path(year, model_name)
+    seascape_file = assignment_path(year, model_name, assignment_table)
 
     if not seascape_file.exists():
         raise FileNotFoundError(
             f"Seascape assignment partition not found: {seascape_file}"
         )
 
+    class_expr = quote_identifier(class_column)
+    score_select = ""
+    score_order_expr = ""
+    where_clause = ""
+
+    if drop_class:
+        dropped = ", ".join(str(int(value)) for value in drop_class)
+        where_clause = f"WHERE {class_expr} NOT IN ({dropped})"
+
+    if score_column:
+        score_expr = quote_identifier(score_column)
+        score_select = f", avg({score_expr}) AS mean_seascape_score"
+        direction = "ASC" if score_order == "asc" else "DESC"
+        score_order_expr = f", mean_seascape_score {direction}"
+
     query = """
         WITH counts AS (
             SELECT
                 CAST(h3 AS UBIGINT) AS h3,
                 CAST(month(date) AS INTEGER) AS month,
-                seascape,
-                count(*) AS seascape_days,
-                avg(seascape_distance) AS mean_seascape_distance
+                {class_expr} AS seascape,
+                count(*) AS seascape_days
+                {score_select}
             FROM read_parquet(?)
-            GROUP BY h3, month, seascape
+            {where_clause}
+            GROUP BY h3, month, {class_expr}
         ),
         ranked AS (
             SELECT
                 *,
                 row_number() OVER (
                     PARTITION BY h3, month
-                    ORDER BY seascape_days DESC, mean_seascape_distance ASC, seascape
+                    ORDER BY seascape_days DESC{score_order_expr}, seascape
                 ) AS rank
             FROM counts
         )
@@ -148,12 +196,18 @@ def monthly_dominant_seascapes(year: int, model_name: str) -> pd.DataFrame:
             h3,
             month,
             CAST(seascape AS INTEGER) AS dominant_seascape,
-            seascape_days,
-            mean_seascape_distance
+            seascape_days
+            {score_output}
         FROM ranked
         WHERE rank = 1
         ORDER BY month, h3
-    """
+    """.format(
+        class_expr=class_expr,
+        where_clause=where_clause,
+        score_select=score_select,
+        score_order_expr=score_order_expr,
+        score_output=", mean_seascape_score" if score_column else "",
+    )
 
     with duckdb.connect(database=":memory:") as con:
         return con.execute(query, [str(seascape_file)]).df()
@@ -227,6 +281,7 @@ def save_monthly_seascape_matrix(
     year: int,
     model_name: str,
     out_file: Path,
+    title_label: str = TITLE_LABEL,
 ) -> None:
     """Save a 12-panel monthly dominant-seascape matrix."""
     if monthly.empty:
@@ -259,7 +314,7 @@ def save_monthly_seascape_matrix(
         )
 
     fig.suptitle(
-        f"Monthly Dominant k-means Seascapes ({display_model_name(model_name)}) — {year}",
+        f"Monthly Dominant {title_label} ({display_model_name(model_name)}) — {year}",
         fontsize=16,
         y=0.985,
     )
@@ -299,6 +354,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--year", type=int, default=YEAR)
     parser.add_argument("--model-name", default=MODEL_NAME)
     parser.add_argument(
+        "--assignment-table",
+        help=(
+            "Modeling table containing yearly seascape assignments. "
+            "Defaults to seascapes/<model-name>."
+        ),
+    )
+    parser.add_argument("--class-column", default=CLASS_COLUMN)
+    parser.add_argument("--score-column", default=SCORE_COLUMN)
+    parser.add_argument(
+        "--drop-class",
+        type=int,
+        action="append",
+        default=[],
+        help="Class value to exclude before summarizing. May be repeated.",
+    )
+    parser.add_argument(
+        "--score-order",
+        default=SCORE_ORDER,
+        choices=("asc", "desc"),
+        help="Tie-break order for the monthly mean score column.",
+    )
+    parser.add_argument("--file-prefix", default=FILE_PREFIX)
+    parser.add_argument("--title-label", default=TITLE_LABEL)
+    parser.add_argument(
+        "--skip-data-export",
+        action="store_true",
+        help="Create the figure without writing the monthly parquet export.",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=OUTPUT_ROOT,
@@ -320,24 +404,31 @@ def main() -> int:
     monthly = monthly_dominant_seascapes(
         year=args.year,
         model_name=args.model_name,
+        assignment_table=args.assignment_table,
+        class_column=args.class_column,
+        score_column=args.score_column,
+        score_order=args.score_order,
+        drop_class=args.drop_class,
     )
     monthly_file = (
         args.data_output_root
-        / f"monthly_dominant_kmeans_seascapes_{args.model_name}_{args.year}.parquet"
+        / f"{args.file_prefix}_{args.model_name}_{args.year}.parquet"
     )
-    monthly_file.parent.mkdir(parents=True, exist_ok=True)
-    monthly.to_parquet(monthly_file, index=False)
-    print("Saved:", monthly_file)
+    if not args.skip_data_export:
+        monthly_file.parent.mkdir(parents=True, exist_ok=True)
+        monthly.to_parquet(monthly_file, index=False)
+        print("Saved:", monthly_file)
 
     figure_file = (
         args.output_root
-        / f"monthly_dominant_kmeans_seascapes_{args.model_name}_{args.year}.png"
+        / f"{args.file_prefix}_{args.model_name}_{args.year}.png"
     )
     save_monthly_seascape_matrix(
         monthly=monthly,
         year=args.year,
         model_name=args.model_name,
         out_file=figure_file,
+        title_label=args.title_label,
     )
     print("Saved:", figure_file)
 

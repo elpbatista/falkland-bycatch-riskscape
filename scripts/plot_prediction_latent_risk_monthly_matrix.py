@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import calendar
+from dataclasses import replace
 from pathlib import Path
+import sys
 from typing import cast
 
 import duckdb
@@ -15,7 +17,6 @@ matplotlib.use("Agg")
 
 from matplotlib import colors
 from matplotlib.axes import Axes
-from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -31,9 +32,21 @@ from riskscape.visualization.base_map import (
 )
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
-    SPECIES_USE_LOG_COLOR_MAX,
     SPECIES_USE_LOG_MIN_DISPLAY,
     aggregation_name,
+    color_norm,
+    draw_prediction_colorbar,
+    draw_prediction_layer,
+    plottable_values,
+)
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from plot_prediction_maps import (  # noqa: E402
+    aggregate_expression,
+    shared_styles,
 )
 
 
@@ -42,11 +55,11 @@ MODEL_NAME = "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k
 PRODUCT_NAME = "joint"
 SPECIES = ["BBAL", "SAFS"]
 AGG = "non_zero_mean"
-CMAP = "YlOrRd"
-RISK_ALPHA = 0.90
 OUTPUT_ROOT = paths["plots"] / "predictions"
 LATENT_RISK_BASELINE = float(np.log1p(MINIMUM_EFFORT_UNIT))
-LATENT_RISK_MIN_DISPLAY = LATENT_RISK_BASELINE
+COLORBAR_WIDTH = 0.025
+DEFAULT_COLOR_RANGE_FACTOR = 1.0
+DEFAULT_MATRIX_COLOR_QUANTILES = (0.0, 0.40, 0.75, 0.90, 1.0)
 
 
 def prediction_path(year: int, model_name: str, product_name: str) -> Path:
@@ -115,21 +128,119 @@ def monthly_latent_risk(
     return out
 
 
-def shared_log_norm(values: pd.Series, vmax_quantile: float) -> colors.LogNorm:
-    """Return a fixed framework color scale for all panels and species."""
-    positive = values.dropna()
+def shared_latent_risk_style(
+    year: int,
+    model_name: str,
+    product_name: str,
+    species_values: list[str],
+    agg: str,
+):
+    """Return the same binned latent-risk style used by prediction maps."""
+    path = prediction_path(year, model_name, product_name)
+    species_use_expr = aggregate_expression("species_use_log_pred", agg)
+    risk_expr = aggregate_expression("risk_log_pred", agg)
+    frames = []
+
+    with duckdb.connect(database=":memory:") as con:
+        for species in species_values:
+            query = f"""
+                SELECT
+                    h3,
+                    species,
+                    {species_use_expr}::FLOAT AS species_use_log_pred,
+                    {risk_expr}::FLOAT AS risk_log_pred
+                FROM read_parquet($path, hive_partitioning=false)
+                WHERE species = $species
+                GROUP BY h3, species
+            """
+            frames.append(
+                con.execute(
+                    query,
+                    {"path": str(path), "species": species},
+                ).fetchdf()
+            )
+
+    predictions = pd.concat(frames, ignore_index=True)
+    predictions["h3"] = predictions["h3"].astype("uint64")
+    _, _, hazard_style, _ = shared_styles(
+        predictions=predictions,
+        species=species_values,
+        agg=agg,
+    )
+    return hazard_style
+
+
+def stretched_binned_style(style, factor: float):
+    """Return the same binned style with a wider experimental color range."""
+    if factor == DEFAULT_COLOR_RANGE_FACTOR:
+        return style
+    if factor <= 0:
+        raise ValueError("--color-range-factor must be greater than 0")
+    if style.colorbar_boundaries is None:
+        return style
+
+    bins = np.asarray(style.colorbar_boundaries, dtype="float64")
+    if bins.size < 2:
+        return style
+
+    lower = float(bins[0])
+    upper = float(bins[-1])
+    stretched_upper = lower + (upper - lower) * factor
+    if stretched_upper <= lower:
+        return style
+
+    if style.color_scale == "log" and lower > 0:
+        stretched_bins = np.geomspace(lower, stretched_upper, bins.size)
+    else:
+        stretched_bins = np.linspace(lower, stretched_upper, bins.size)
+
+    return replace(
+        style,
+        colorbar_boundaries=tuple(float(value) for value in stretched_bins),
+        color_max=float(stretched_bins[-1]),
+    )
+
+
+def quantile_binned_style(
+    style,
+    values: pd.Series,
+    quantiles: tuple[float, ...],
+):
+    """Return the same binned style with boundaries from supplied values."""
+    if style.colorbar_labels is None:
+        return style
+    if len(quantiles) != len(style.colorbar_labels) + 1:
+        raise ValueError(
+            "--color-quantiles must provide one more value than colorbar labels"
+        )
+    if any(value < 0 or value > 1 for value in quantiles):
+        raise ValueError("--color-quantiles values must be between 0 and 1")
+    if any(next_value < value for value, next_value in zip(quantiles, quantiles[1:])):
+        raise ValueError("--color-quantiles values must be sorted")
+
+    lower = style.color_min if style.color_min is not None else 0.0
+    positive = values[values > lower].dropna()
     if positive.empty:
-        raise ValueError("Log color scale requires positive latent-risk values")
+        return style
 
-    vmin = LATENT_RISK_MIN_DISPLAY
-    vmax = float(SPECIES_USE_LOG_COLOR_MAX + np.log1p(MINIMUM_EFFORT_UNIT))
+    bins = positive.quantile(quantiles).to_numpy(dtype="float64")
+    bins[0] = lower
 
-    if vmax <= vmin:
-        vmax = float(positive.max())
-    if vmax <= vmin:
-        vmax = vmin * 1.01
+    if (bins[1:] <= bins[:-1]).any():
+        upper = float(positive.max())
+        if upper <= lower:
+            upper = lower * 1.01 if lower > 0 else 1.0
+        if style.color_scale == "log" and lower > 0:
+            bins = np.geomspace(lower, upper, len(style.colorbar_labels) + 1)
+        else:
+            bins = np.linspace(lower, upper, len(style.colorbar_labels) + 1)
 
-    return colors.LogNorm(vmin=vmin, vmax=vmax)
+    return replace(
+        style,
+        colorbar_quantiles=None,
+        colorbar_boundaries=tuple(float(value) for value in bins),
+        color_max=float(bins[-1]),
+    )
 
 
 def month_panel_title(month: int) -> str:
@@ -142,7 +253,8 @@ def plot_month_panel(
     grid: gpd.GeoDataFrame,
     monthly: pd.DataFrame,
     month: int,
-    norm: colors.LogNorm,
+    norm: colors.Normalize,
+    style,
     bounds: MapBounds,
     land: gpd.GeoDataFrame,
     coast: gpd.GeoDataFrame,
@@ -163,15 +275,17 @@ def plot_month_panel(
     ].copy()
 
     if not plot_gdf.empty:
-        plot_gdf.plot(
-            ax=ax,
-            column="latent_risk_log_pred",
-            cmap=CMAP,
+        plot_gdf = plottable_values(
+            plot_gdf,
+            "latent_risk_log_pred",
+            style,
+        )
+        draw_prediction_layer(
+            ax,
+            plot_gdf,
+            value_col="latent_risk_log_pred",
             norm=norm,
-            legend=False,
-            alpha=RISK_ALPHA,
-            edgecolor="none",
-            linewidth=0,
+            style=style,
         )
 
     bbox_gdf = gpd.GeoDataFrame(
@@ -209,7 +323,8 @@ def plot_monthly_matrix(
     model_name: str,
     product_name: str,
     agg: str,
-    norm: colors.LogNorm,
+    norm: colors.Normalize,
+    style,
 ) -> Path:
     """Plot a 3-by-4 monthly latent-risk matrix."""
     species_monthly = monthly[monthly["species"] == species].copy()
@@ -235,6 +350,7 @@ def plot_monthly_matrix(
             monthly=species_monthly,
             month=month,
             norm=norm,
+            style=style,
             bounds=bounds,
             land=land,
             coast=coast,
@@ -250,16 +366,25 @@ def plot_monthly_matrix(
         hspace=0.15,
     )
 
-    cax = fig.add_axes((0.88, 0.20, 0.025, 0.60))
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(CMAP)),
+    fig_width, fig_height = fig.get_size_inches()
+    segment_height = COLORBAR_WIDTH * fig_width / fig_height
+    colorbar_height = segment_height * len(style.colorbar_labels or ())
+    colorbar_bottom = 0.50 - colorbar_height / 2
+    cax = fig.add_axes(
+        (
+            0.88,
+            colorbar_bottom,
+            COLORBAR_WIDTH,
+            colorbar_height,
+        )
+    )
+    draw_prediction_colorbar(
+        axes_flat[-1],
+        value_col="latent_risk_log_pred",
+        norm=norm,
+        style=style,
         cax=cax,
     )
-    cbar.set_label("Latent Risk")
-    for spine in cbar.ax.spines.values():
-        spine.set_visible(False)
-    cbar.set_ticks([])
-    cbar.ax.tick_params(which="both", length=0, labelleft=False, labelright=False)
 
     out_file = output_path(
         model_name=model_name,
@@ -289,10 +414,30 @@ def parse_args() -> argparse.Namespace:
         choices=("non_zero_median", "non_zero_mean"),
     )
     parser.add_argument(
-        "--vmax-quantile",
+        "--color-range-factor",
         type=float,
-        default=0.99,
-        help="Upper quantile for the shared log color scale.",
+        default=DEFAULT_COLOR_RANGE_FACTOR,
+        help=(
+            "Experiment-only multiplier for the shared binned color range. "
+            "Use 1.0 to match prediction maps exactly."
+        ),
+    )
+    parser.add_argument(
+        "--color-bin-source",
+        choices=("risk_map", "monthly_pooled", "monthly_species"),
+        default="risk_map",
+        help=(
+            "Source for binned color boundaries. risk_map matches prediction "
+            "maps; monthly_* are experiment-only tail-emphasis modes."
+        ),
+    )
+    parser.add_argument(
+        "--color-quantiles",
+        nargs=5,
+        type=float,
+        default=DEFAULT_MATRIX_COLOR_QUANTILES,
+        metavar=("Q0", "Q1", "Q2", "Q3", "Q4"),
+        help="Quantiles used by monthly_pooled/monthly_species bin sources.",
     )
     return parser.parse_args()
 
@@ -307,12 +452,36 @@ def main() -> int:
         species_values=list(args.species),
         agg=args.agg,
     )
-    norm = shared_log_norm(
-        cast(pd.Series, monthly["latent_risk_log_pred"]),
-        vmax_quantile=args.vmax_quantile,
+    style = shared_latent_risk_style(
+        year=args.year,
+        model_name=args.model_name,
+        product_name=args.product_name,
+        species_values=list(args.species),
+        agg=args.agg,
     )
+    style = stretched_binned_style(style, args.color_range_factor)
+    color_quantiles = tuple(float(value) for value in args.color_quantiles)
+
+    if args.color_bin_source == "monthly_pooled":
+        style = quantile_binned_style(
+            style,
+            cast(pd.Series, monthly["latent_risk_log_pred"]),
+            color_quantiles,
+        )
 
     for species in args.species:
+        species_style = style
+        if args.color_bin_source == "monthly_species":
+            species_mask = cast(pd.Series, monthly["species"]).eq(species)
+            species_style = quantile_binned_style(
+                style,
+                cast(pd.Series, monthly.loc[species_mask, "latent_risk_log_pred"]),
+                color_quantiles,
+            )
+        norm = color_norm(
+            cast(pd.Series, monthly["latent_risk_log_pred"]),
+            species_style,
+        )
         out_file = plot_monthly_matrix(
             monthly=monthly,
             species=species,
@@ -321,6 +490,7 @@ def main() -> int:
             product_name=args.product_name,
             agg=args.agg,
             norm=norm,
+            style=species_style,
         )
         print(f"Saved: {out_file}")
 

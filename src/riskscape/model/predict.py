@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import joblib
 import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
+from riskscape.model.block_cv_train import SplitSummary
 from riskscape.model.dataset import (
     FEATURES,
     FISHING_TARGET,
@@ -65,11 +67,11 @@ PREDICTION_PRODUCTS = ["joint"]
 MODEL_DIR = paths["data"] / "modeling" / "models"
 PREDICTION_ROOT = paths["data"] / "modeling" / "predictions"
 
-
 def load_model_payload(path: Path):
     """Load model payload."""
     if not path.exists():
         raise FileNotFoundError(f"Missing model: {path}")
+    setattr(sys.modules["__main__"], "SplitSummary", SplitSummary)
     return joblib.load(path)
 
 

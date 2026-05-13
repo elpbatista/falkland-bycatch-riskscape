@@ -824,7 +824,7 @@ def parse_args() -> argparse.Namespace:
             "environmental_gmm",
             "environmental_seascape",
         ],
-        default="spatial",
+        default="environmental_seascape",
         help="Validation split strategy.",
     )
     parser.add_argument(
