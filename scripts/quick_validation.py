@@ -30,7 +30,7 @@ from riskscape.config import paths
 path = paths["data"] / "modeling" / "fishing_training" / "year=2022" / "part.parquet"
 # path = paths["data"] / "features" / "environmental" / "year=2022" / "part.parquet"
 
-path = paths["data"] / "modeling" / "predictions" / "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30" / "joint" / "year=2022" / "part.parquet"
+path = paths["data"] / "modeling" / "predictions" / "hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30" / "joint" / "year=2022" / "part.parquet"
 
 df = pd.read_parquet(path)
 

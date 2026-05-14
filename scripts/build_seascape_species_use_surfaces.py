@@ -12,9 +12,9 @@ from riskscape.model.dataset import modeling_root
 
 
 YEARS = "2014-2023"
-MODEL_NAME = "kmeans_k10"
+MODEL_NAME = "som_15x15_hierarchical_k30"
 PREDICTION_MODEL = (
-    "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
+    "hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30"
 )
 PREDICTION_PRODUCT = "joint"
 SPECIES_YEARS = [2022, 2023]

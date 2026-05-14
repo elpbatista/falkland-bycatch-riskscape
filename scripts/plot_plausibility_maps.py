@@ -10,11 +10,11 @@ from riskscape.visualization.maps import (
 
 
 YEAR = 2022
-MODEL_NAME = "bayesian_gmm"
+MODEL_NAME = "bayesian_gmm_k30"
 VALUE_COL = "plausibility"
-AGG = "non_zero_median"
+AGG = "non_zero_mean"
 CONFIDENCE_THRESHOLD = None
-PLAUSIBILITY_MAP_NAME = "Non-zero median plausibility"
+PLAUSIBILITY_MAP_NAME = "Non-zero mean plausibility"
 
 PLAUSIBILITY_STYLE = MapStyle(
     title=None,
@@ -52,7 +52,7 @@ def main() -> int:
             value_col=VALUE_COL,
             agg=AGG,
             confidence_threshold=CONFIDENCE_THRESHOLD,
-            title=f"Non-Zero Median Environmental Plausibility — {species} — {YEAR}",
+            title=f"Non-zero mean plausibility environmental plausibility - {species} - {YEAR}",
             style=PLAUSIBILITY_STYLE,
         )
         print(f"Saved: {out_file}")

@@ -50,9 +50,9 @@ from riskscape.visualization.maps import (
 
 
 YEAR = 2022
-MODEL_NAME = "kmeans_k15"
+MODEL_NAME = "som_15x15_hierarchical_k30"
 PREDICTION_MODEL = (
-    "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
+    "hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30"
 )
 PREDICTION_PRODUCT = "joint"
 SPECIES = ["BBAL", "SAFS"]
@@ -66,10 +66,6 @@ FEATURE_GRID_ROOT = paths["data"] / "modeling" / "feature_grid"
 SEASCAPE_ROOT = paths["data"] / "modeling" / "environmental_regimes"
 SEASCAPE_MODEL_ROOT = paths["data"] / "modeling" / "models" / "seascapes"
 SEASCAPE_SUMMARY_ROOT = paths["data"] / "plot_exports" / "seascapes"
-OBSERVED_SEASCAPE_USE_FILE = (
-    SEASCAPE_SUMMARY_ROOT
-    / "species_use_mean_log_by_kmeans_k15_complete.csv"
-)
 FISHING_ROOT = paths["data"] / "modeling" / "fishing_training"
 SOURCE_PREDICTION_ROOT = (
     paths["data"]
@@ -217,6 +213,17 @@ def feature_grid_path(year: int) -> Path:
 
 def seascape_assignment_path(year: int, model_name: str) -> Path:
     """Return compact environmental-regime assignment path for one year."""
+    seascape_file = (
+        paths["data"]
+        / "modeling"
+        / "seascapes"
+        / model_name
+        / f"year={year}"
+        / "part.parquet"
+    )
+    if seascape_file.exists():
+        return seascape_file
+
     return SEASCAPE_ROOT / f"year={year}" / "part.parquet"
 
 
@@ -316,9 +323,14 @@ def load_seascape_model(model_name: str):
     return joblib.load(seascape_model_path(model_name))
 
 
+def seascape_assignment_column(model_name: str) -> str:
+    """Return class column name for one seascape assignment table."""
+    return "kmeans_k15" if model_name == "kmeans_k15" else "seascape"
+
+
 def seascape_species_values(model_name: str, year: int) -> dict[str, np.ndarray]:
     """Return species-specific seascape-use vectors in cluster-id order."""
-    summary_file = OBSERVED_SEASCAPE_USE_FILE
+    summary_file = seascape_summary_path(model_name, year)
     if not summary_file.exists():
         raise FileNotFoundError(f"Seascape summary not found: {summary_file}")
 
@@ -333,12 +345,13 @@ def seascape_species_values(model_name: str, year: int) -> dict[str, np.ndarray]
         raise KeyError(f"Seascape summary missing columns: {sorted(missing)}")
 
     values: dict[str, np.ndarray] = {}
+    n_classes = int(summary["seascape"].max()) + 1
     for species, group in summary.groupby("species", sort=False):
         ordered = (
             group
             .sort_values("seascape")
             .set_index("seascape")
-            .reindex(range(15))
+            .reindex(range(n_classes))
         )
         values[str(species)] = ordered["mean_log_residence_index"].fillna(
             0.0
@@ -362,18 +375,19 @@ def build_hard_prediction_product(
     fishing = load_fishing_log(year)
     frames = []
 
+    class_col = seascape_assignment_column(model_name)
     assignments = pd.read_parquet(
         assignment_file,
-        columns=["h3", "date", "kmeans_k15"],
+        columns=["h3", "date", class_col],
     )
     assignments = normalize_date_column(assignments)
-    assignments["kmeans_k15"] = assignments["kmeans_k15"].astype("int16")
+    assignments["seascape"] = assignments[class_col].astype("int16")
     assignments = assignments.merge(fishing, on=["h3", "date"], how="left")
     assignments["fishing_activity_log"] = (
         assignments["fishing_activity_log"].fillna(0.0).astype("float32")
     )
 
-    seascape_ids = assignments["kmeans_k15"].to_numpy(dtype="int16")
+    seascape_ids = assignments["seascape"].to_numpy(dtype="int16")
     fishing_raw = np.expm1(
         assignments["fishing_activity_log"].to_numpy(dtype="float64")
     )
@@ -501,7 +515,7 @@ def build_seascape_prediction_product(
     batch_rows: int,
 ) -> Path:
     """Write a standard prediction product for soft seascape-conditioned maps."""
-    if model_name == "kmeans_k15":
+    if model_name == "kmeans_k15" or model_name.startswith("som_"):
         return build_hard_prediction_product(year=year, model_name=model_name)
 
     feature_file = feature_grid_path(year)

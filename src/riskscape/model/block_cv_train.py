@@ -9,7 +9,7 @@ from blockCV-style validation:
 - buffered: hold out spatial H3 parent blocks and remove neighboring cells
   from training.
 - environmental_gmm: hold out Bayesian/Gaussian mixture components.
-- environmental_seascape: hold out feature-only KMeans seascapes.
+- environmental_seascape: hold out environmental seascape classes.
 """
 
 from __future__ import annotations
@@ -42,15 +42,15 @@ SplitName = Literal[
 BalanceMode = Literal["before", "after", "none"]
 
 RANDOM_STATE = base_train.RANDOM_STATE
-# Blocked validation commonly uses smaller holdouts than the production random
-# 75/25 split. A 10% target holdout follows the lower end of the 10-20% range
-# often used for blockCV-style diagnostics while preserving training support.
-DEFAULT_TEST_FRACTION = 0.10
+# Blocked validation commonly uses smaller holdouts than the production random 75/25 split. 
+# A 10% target holdout follows the lower end of the 10-20% range often used for blockCV-style diagnostics while preserving training support.
+DEFAULT_TEST_FRACTION = 0.12
 DEFAULT_BLOCK_RESOLUTION = 4
 DEFAULT_BUFFER_RINGS = 1
-DEFAULT_CV_FOLDS = 1
+DEFAULT_CV_FOLDS = 5
 DEFAULT_ENVIRONMENTAL_REGIME_TABLE = "environmental_regimes"
-DEFAULT_SEASCAPE_TABLE = DEFAULT_ENVIRONMENTAL_REGIME_TABLE
+DEFAULT_SEASCAPE_TABLE = "seascapes/som_15x15_hierarchical_k30"
+DEFAULT_SEASCAPE_COLUMN = "seascape"
 DEFAULT_COMPONENT_TABLE = DEFAULT_ENVIRONMENTAL_REGIME_TABLE
 
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
@@ -170,16 +170,20 @@ def add_gmm_components(df: pd.DataFrame, component_table: str) -> pd.DataFrame:
     return out.drop(columns=["component"])
 
 
-def add_seascapes(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    """Join feature-only KMeans seascape labels onto species rows."""
+def add_seascapes(
+    df: pd.DataFrame,
+    table_name: str,
+    seascape_column: str,
+) -> pd.DataFrame:
+    """Join seascape labels onto species rows."""
     years = sorted(int(year) for year in df["_year"].unique())
     seascapes = load_years_table(
         table_name,
         years,
-        columns=["h3", "date", "kmeans_k15"],
+        columns=["h3", "date", seascape_column],
     )
     seascapes = seascapes.drop_duplicates(["h3", "date"])
-    seascapes = seascapes.rename(columns={"kmeans_k15": "seascape"})
+    seascapes = seascapes.rename(columns={seascape_column: "seascape"})
 
     out = df.merge(
         seascapes,
@@ -201,6 +205,7 @@ def add_split_groups(
     split: SplitName,
     block_resolution: int,
     seascape_table: str,
+    seascape_column: str,
     component_table: str,
 ) -> pd.DataFrame:
     """Attach split-group labels for blocked split modes."""
@@ -209,7 +214,7 @@ def add_split_groups(
     if split == "environmental_gmm":
         return add_gmm_components(df, component_table)
     if split == "environmental_seascape":
-        return add_seascapes(df, seascape_table)
+        return add_seascapes(df, seascape_table, seascape_column)
 
     raise ValueError(f"Unknown split: {split}")
 
@@ -857,6 +862,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--component-table", default=DEFAULT_COMPONENT_TABLE)
     parser.add_argument("--seascape-table", default=DEFAULT_SEASCAPE_TABLE)
+    parser.add_argument("--seascape-column", default=DEFAULT_SEASCAPE_COLUMN)
     parser.add_argument(
         "--run-label",
         default=None,
@@ -908,6 +914,7 @@ def train_models() -> Path:
         split=split,
         block_resolution=args.block_resolution,
         seascape_table=args.seascape_table,
+        seascape_column=args.seascape_column,
         component_table=args.component_table,
     )
 

@@ -31,13 +31,13 @@ from riskscape.visualization.base_map import (
 from riskscape.visualization.maps import plausibility_path
 
 
-MODEL_NAME = "bayesian_gmm"
+MODEL_NAME = "bayesian_gmm_k30"
 PRODUCT_NAME = "joint"
 YEARS = list(range(2014, 2024))
 SPECIES = ["BBAL", "SAFS"]
 OUTPUT_ROOT = paths["plots"] / "plausibility"
 DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "plausibility"
-VALUE_COL = "plausibility_non_zero_median"
+VALUE_COL = "plausibility_non_zero_mean"
 CMAP = "viridis"
 
 
@@ -106,7 +106,7 @@ def monthly_climatology(
     model_name: str,
     product_name: str,
 ) -> pd.DataFrame:
-    """Compute non-zero median plausibility by month, species, and H3 cell."""
+    """Compute non-zero mean plausibility by month, species, and H3 cell."""
     files = plausibility_files(
         years=years,
         model_name=model_name,
@@ -117,7 +117,7 @@ def monthly_climatology(
             species,
             CAST(h3 AS UBIGINT) AS h3,
             CAST(month(date) AS INTEGER) AS month,
-            CAST(median(plausibility) AS FLOAT) AS {VALUE_COL},
+            CAST(avg(plausibility) AS FLOAT) AS {VALUE_COL},
             CAST(count(*) AS BIGINT) AS plausibility_non_zero_count
         FROM read_parquet({sql_list(files)})
         WHERE plausibility > 0
@@ -216,7 +216,7 @@ def plot_species_matrix(
 
     label = year_label(years)
     fig.suptitle(
-        f"Monthly Non-Zero Median Environmental Plausibility — {species} — {label}",
+        f"Monthly Non-Zero Mean Environmental Plausibility — {species} — {label}",
         fontsize=16,
         y=0.985,
     )
@@ -234,14 +234,14 @@ def plot_species_matrix(
         ScalarMappable(norm=norm, cmap=plt.get_cmap(CMAP)),
         cax=cax,
     )
-    cbar.set_label("Non-zero median plausibility")
+    cbar.set_label("Non-zero mean plausibility")
     cbar.set_ticks([0.0, 1.0])
     cbar.ax.tick_params(which="major", length=2, labelsize=8)
     cbar.minorticks_off()
     for spine in cbar.ax.spines.values():
         spine.set_visible(False)
 
-    out_file = output_root / f"monthly_non_zero_median_plausibility_{species}_{label}.png"
+    out_file = output_root / f"monthly_non_zero_mean_plausibility_{species}_{label}.png"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -309,7 +309,7 @@ def main() -> int:
 
     summary_file = (
         args.data_output_root
-        / f"monthly_non_zero_median_plausibility_{label}.parquet"
+        / f"monthly_non_zero_mean_plausibility_{label}.parquet"
     )
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     monthly.to_parquet(summary_file, index=False)

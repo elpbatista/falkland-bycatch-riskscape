@@ -87,6 +87,11 @@ def component_colors(components: list[int]) -> dict[int, str]:
     return extended_class_colors(max(components) + 1)
 
 
+def model_label(model_name: str) -> str:
+    """Return a compact display label for the component model."""
+    return model_name.replace("_", " ").upper().replace("BAYESIAN GMM", "Bayesian/GMM")
+
+
 def draw_component_colorbar(fig: Any, cax: Axes, components: list[int]) -> None:
     """Draw a discrete component color bar matching the risk-map style."""
     if not components:
@@ -297,6 +302,7 @@ def plot_component_panel(
 def save_component_map(
     summary: pd.DataFrame,
     year: int,
+    model_name: str,
     out_file: Path,
 ) -> None:
     """Save one dominant-component map."""
@@ -315,7 +321,7 @@ def save_component_map(
     )
 
     fig.suptitle(
-        f"Dominant Bayesian/GMM Environmental Components — {year}",
+        f"Dominant {model_label(model_name)} Environmental Components — {year}",
         fontsize=14,
         y=0.98,
     )
@@ -399,6 +405,7 @@ def plot_month_panel(
 def save_monthly_component_matrix(
     monthly: pd.DataFrame,
     year: int,
+    model_name: str,
     out_file: Path,
 ) -> None:
     """Save a 12-panel monthly dominant-component matrix."""
@@ -432,7 +439,7 @@ def save_monthly_component_matrix(
         )
 
     fig.suptitle(
-        f"Monthly Dominant Bayesian/GMM Environmental Components — {year}",
+        f"Monthly Dominant {model_label(model_name)} Environmental Components — {year}",
         fontsize=16,
         y=0.985,
     )
@@ -511,7 +518,7 @@ def main() -> int:
     )
     summary_file = (
         args.data_output_root
-        / f"dominant_bayesian_gmm_components_{args.year}.parquet"
+        / f"dominant_{args.model}_components_{args.year}.parquet"
     )
 
     summary_file.parent.mkdir(parents=True, exist_ok=True)
@@ -519,10 +526,11 @@ def main() -> int:
 
     print("Saved:", summary_file)
 
-    figure_file = args.output_root / f"dominant_bayesian_gmm_components_{args.year}.png"
+    figure_file = args.output_root / f"dominant_{args.model}_components_{args.year}.png"
     save_component_map(
         summary=summary,
         year=args.year,
+        model_name=args.model,
         out_file=figure_file,
     )
     print("Saved:", figure_file)
@@ -536,18 +544,19 @@ def main() -> int:
         )
         monthly_file = (
             args.data_output_root
-            / f"monthly_dominant_bayesian_gmm_components_{args.year}.parquet"
+            / f"monthly_dominant_{args.model}_components_{args.year}.parquet"
         )
         monthly.to_parquet(monthly_file, index=False)
         print("Saved:", monthly_file)
 
         figure_file = (
             args.output_root
-            / f"monthly_dominant_bayesian_gmm_components_{args.year}.png"
+            / f"monthly_dominant_{args.model}_components_{args.year}.png"
         )
         save_monthly_component_matrix(
             monthly=monthly,
             year=args.year,
+            model_name=args.model,
             out_file=figure_file,
         )
         print("Saved:", figure_file)

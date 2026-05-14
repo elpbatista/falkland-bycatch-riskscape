@@ -38,7 +38,7 @@ PREDICTION_MODE = "hybrid"
 ACTIVE_MODEL_NAME = "extra_trees"
 
 # Used only when PREDICTION_MODE = "hybrid".
-HYBRID_ML_MODEL_NAME = "extra_trees_kmeans_k15_blockcv"
+HYBRID_ML_MODEL_NAME = "extra_trees_som_hierarchical_k30_5fold_blockcv"
 HYBRID_BAYESIAN_MODEL_NAME = "bayesian_gmm_k30"
 
 # Hybrid strategy options:

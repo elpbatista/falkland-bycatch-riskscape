@@ -51,7 +51,7 @@ from plot_prediction_maps import (  # noqa: E402
 )
 
 
-MODEL_NAME = "hybrid_presence_gate_extra_trees_kmeans_k15_blockcv_bayesian_gmm_k30"
+MODEL_NAME = "hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30"
 PRODUCT_NAME = "joint"
 START_YEAR = 2014
 END_YEAR = 2023

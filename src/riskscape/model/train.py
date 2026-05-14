@@ -37,7 +37,7 @@ MAX_POSITIVE_ROWS = None
 
 MODEL_DIR = paths["data"] / "modeling" / "models"
 METRICS_DIR = paths["data"] / "modeling" / "metrics"
-ACTIVE_EXTRA_TREES_MODEL_NAME = "extra_trees_kmeans_k15_blockcv"
+ACTIVE_EXTRA_TREES_MODEL_NAME = "extra_trees_som_hierarchical_k30_5fold_blockcv"
 
 GMM_COMPONENTS = 30
 GMM_REG_COVAR = 1e-6
