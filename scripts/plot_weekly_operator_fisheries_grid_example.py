@@ -151,6 +151,7 @@ def plot_panel(
     bounds: MapBounds,
     land: gpd.GeoDataFrame,
     coast: gpd.GeoDataFrame,
+    value_col: str = VALUE_COL,
 ) -> None:
     """Draw one fisheries-grid weekly climatology panel."""
     ax.set_facecolor(OCEAN_COLOR)
@@ -159,18 +160,18 @@ def plot_panel(
 
     values = aggregated[
         (aggregated["species"] == species) & (aggregated["iso_week"] == week)
-    ][["fisheries_grid", VALUE_COL]]
+    ][["fisheries_grid", value_col]]
     plot_gdf = fisheries_grid.merge(
         values,
         left_on="group",
         right_on="fisheries_grid",
         how="left",
     )
-    plot_gdf = plot_gdf.dropna(subset=[VALUE_COL])
+    plot_gdf = plot_gdf.dropna(subset=[value_col])
 
     if not plot_gdf.empty:
         try:
-            plot_gdf = plottable_values(plot_gdf, VALUE_COL, style)
+            plot_gdf = plottable_values(plot_gdf, value_col, style)
         except ValueError:
             plot_gdf = plot_gdf.iloc[0:0]
 
@@ -178,7 +179,7 @@ def plot_panel(
         draw_prediction_layer(
             ax=ax,
             gdf=plot_gdf,
-            value_col=VALUE_COL,
+            value_col=value_col,
             norm=norm,
             style=style,
         )
@@ -224,11 +225,15 @@ def plot_small_multiples(
     product_name: str,
     start_year: int,
     end_year: int,
+    title: str | None = None,
+    out_file: Path | None = None,
+    value_col: str = VALUE_COL,
+    style_species_values: list[str] | None = None,
 ) -> Path:
     """Plot fisheries-grid weekly climatology example small multiples."""
     land, coast = load_reference_layers()
     bounds = MapBounds.from_config()
-    style = risk_style(model_name, product_name, species_values)
+    style = risk_style(model_name, product_name, style_species_values or species_values)
     norm = risk_norm(style)
 
     fig, axes = plt.subplots(
@@ -253,10 +258,12 @@ def plot_small_multiples(
                 bounds=bounds,
                 land=land,
                 coast=coast,
+                value_col=value_col,
             )
 
     fig.suptitle(
-        f"Weekly Latent-Risk Climatology on Fisheries Grid - {start_year}-{end_year}",
+        title
+        or f"Weekly Latent-Risk Climatology on Fisheries Grid - {start_year}-{end_year}",
         fontsize=16,
         y=0.985,
     )
@@ -272,18 +279,19 @@ def plot_small_multiples(
     cax = fig.add_axes(SMALL_MULTIPLES_COLORBAR_POSITION)
     draw_prediction_colorbar(
         ax=cast(Axes, axes_array[0, -1]),
-        value_col=VALUE_COL,
+        value_col=value_col,
         norm=norm,
         style=style,
         cax=cast(Axes, cax),
     )
 
-    out_file = output_path(
-        model_name=model_name,
-        product_name=product_name,
-        start_year=start_year,
-        end_year=end_year,
-    )
+    if out_file is None:
+        out_file = output_path(
+            model_name=model_name,
+            product_name=product_name,
+            start_year=start_year,
+            end_year=end_year,
+        )
     out_file.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_file, dpi=300, bbox_inches="tight")
     plt.close(fig)

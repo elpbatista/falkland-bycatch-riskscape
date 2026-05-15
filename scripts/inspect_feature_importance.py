@@ -2,21 +2,20 @@
 
 import joblib
 import pandas as pd
-from sklearn.inspection import permutation_importance
 
 from riskscape.config import paths
-from riskscape.model.dataset import FEATURES, FISHING_TARGET, SPECIES_TARGET
-from riskscape.model.train import load_table, split_time
+from riskscape.model.dataset import FEATURES
 
 
-RANDOM_STATE = 42
-MAX_PERMUTATION_ROWS = 100_000
 MODEL_DIR = paths["data"] / "modeling" / "models"
+ACTIVE_SPECIES_MODEL = "extra_trees_som_hierarchical_k30_5fold_blockcv"
 
 
 def species_importance() -> pd.DataFrame:
-    """Return species Random Forest feature importance."""
-    payload = joblib.load(MODEL_DIR / "species_model.joblib")
+    """Return species Extra Trees feature importance."""
+    payload = joblib.load(
+        MODEL_DIR / ACTIVE_SPECIES_MODEL / "species_model_joint.joblib"
+    )
 
     model = payload["model"]
     encoder = payload["encoder"]
@@ -34,51 +33,9 @@ def species_importance() -> pd.DataFrame:
     return importance.sort_values("importance", ascending=False)
 
 
-def fishing_importance() -> pd.DataFrame:
-    """Return fishing permutation feature importance."""
-    payload = joblib.load(MODEL_DIR / "fishing_model.joblib")
-    model = payload["model"]
-
-    df = load_table("fishing_training")
-
-    cols = [FISHING_TARGET] + FEATURES
-    df = df[cols + ["date"]].dropna(subset=cols)
-
-    _, test = split_time(df)
-
-    if len(test) > MAX_PERMUTATION_ROWS:
-        test = test.sample(
-            n=MAX_PERMUTATION_ROWS,
-            random_state=RANDOM_STATE,
-        )
-
-    x_test = test[FEATURES]
-    y_test = test[FISHING_TARGET]
-
-    result = permutation_importance(
-        model,
-        x_test,
-        y_test,
-        n_repeats=5,
-        random_state=RANDOM_STATE,
-        scoring="neg_mean_absolute_error",
-    )
-
-    importance = pd.DataFrame(
-        {
-            "feature": FEATURES,
-            "importance_mean": result.importances_mean,
-            "importance_std": result.importances_std,
-        }
-    )
-
-    return importance.sort_values("importance_mean", ascending=False)
-
-
 def main() -> int:
     """Run inspection."""
     species = species_importance()
-    fishing = fishing_importance()
 
     print("Species feature importance:")
     print(species.to_string(index=False))
@@ -87,15 +44,7 @@ def main() -> int:
     species.to_csv(species_file, index=False)
 
     print()
-    print("Fishing feature importance:")
-    print(fishing.to_string(index=False))
-
-    fishing_file = MODEL_DIR / "fishing_feature_importance.csv"
-    fishing.to_csv(fishing_file, index=False)
-
-    print()
     print("Saved:", species_file)
-    print("Saved:", fishing_file)
 
     return 0
 
