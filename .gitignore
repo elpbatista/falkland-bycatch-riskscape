@@ -48,11 +48,13 @@ Thumbs.db
 # Ignore data outputs
 data/
 plots/
+outputs/
+logs/
+*/dev/
 *.parquet
 *.nc
 *.zip
-logs/
-*/dev/
+
 plots/*.csv
 plots/**/*.csv
 plots/predictions/weekly_operator/*.mp4
