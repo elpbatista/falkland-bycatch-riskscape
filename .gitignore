@@ -49,6 +49,8 @@ Thumbs.db
 data/
 plots/
 outputs/
+reference/*
+!reference/README.md
 logs/
 */dev/
 *.parquet
