@@ -47,6 +47,7 @@ Thumbs.db
 
 # Ignore data outputs
 data/
+plots/
 *.parquet
 *.nc
 *.zip
