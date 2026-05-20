@@ -161,27 +161,13 @@ print("Downloaded:", filename)
 
 Avoid excessive logging unless necessary.
 
-## Data Pipeline Structure
+## Workflow Structure
 
-The pipeline follows this structure:
+Keep workflow scripts small and focused. Each script should perform one
+pipeline stage and should read shared settings from the configuration system.
 
-```text
-config.yaml
-      │
-      ▼
-grid generation
-      │
-      ▼
-data downloads
-      │
-      ▼
-layer construction
-      │
-      ▼
-modeling
-```
-
-Each stage should have small, focused scripts.
+The current public workflow map is maintained in `docs/workflow.md`. Do not
+duplicate workflow diagrams here; they tend to drift as the pipeline changes.
 
 ## Keep the Codebase Lean
 

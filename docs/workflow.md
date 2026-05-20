@@ -42,21 +42,87 @@ python scripts/download_data.py --dataset sst chl ssh wind gfw
 
 Raw downloads are written under `data/raw/` and are ignored by Git.
 
-## 4. Build Spatial and Feature Tables
+## 4. Build Spatial Framework
 
-The workflow builds a common H3 spatial frame, then aligns environmental,
-fishing-effort, and species-presence features to that frame.
+Build the common H3 spatial frame and static grid-level features.
 
-Core script candidates include:
+Current script candidates:
 
 - `scripts/build_grid.py`
 - `scripts/build_static_features.py`
+
+## 5. Build Lookups and Indices
+
+Build reusable lookup tables that connect environmental rasters, seasons,
+neighbors, and other spatial relationships to the project grid.
+
+Current script candidates:
+
+- `scripts/build_h3_lookup.py`
+- `scripts/build_neighbor_table.py`
+- `scripts/build_neighbor_index_table.py`
+- `scripts/build_seasonal_lookup.py`
+
+## 6. Build Primary Feature Tables
+
+Align source data to the grid and construct the main feature tables.
+
+Current script candidates:
+
 - `scripts/build_environmental_feature_table.py`
 - `scripts/build_fishing_effort_feature_table.py`
 - `scripts/build_species_presence_feature_table.py`
+
+## 7. Build Derived Variables
+
+Create derived physical and ecological variables from the primary features.
+These include gradients, anomalies, environmental regimes, and other
+model-facing derived fields.
+
+Current script candidates:
+
+- `scripts/build_derived_features.py`
+- `scripts/build_environmental_gradients.py`
+- `scripts/build_environmental_anomalies.py`
+- `scripts/build_environmental_regime_table.py`
+- `scripts/build_seascape_species_use_surfaces.py`
+
+## 8. Inspect and Validate Intermediate Products
+
+Inspection stages are part of the workflow, not an afterthought. They should be
+run before treating outputs as model-ready.
+
+Current script candidates:
+
+- `scripts/inspect_columns.py`
+- `scripts/feature_qa_summary.py`
+- `scripts/quick_validation.py`
+- `scripts/run_correlation.py`
+- `scripts/run_relationships.py`
+
+Diagnostic plots also support inspection:
+
+- `scripts/plot_environmental_histograms.py`
+- `scripts/plot_environmental_correlation_heatmap.py`
+- `scripts/plot_environmental_daily_timeseries.py`
+- `scripts/plot_environmental_monthly_matrix.py`
+- `scripts/plot_environmental_gradient_maps.py`
+- `scripts/plot_environmental_single_date_maps.py`
+- `scripts/plot_fishing_activity_map.py`
+- `scripts/plot_fishing_activity_monthly_matrix.py`
+- `scripts/plot_fishing_activity_monthly_timeseries.py`
+- `scripts/plot_species_presence_maps.py`
+- `scripts/plot_relationship_diagnostics.py`
+
+## 9. Assemble Model-Ready Datasets
+
+Combine feature tables into model-ready datasets.
+
+Current script candidates:
+
 - `scripts/build_model_datasets.py`
 
-## 5. Train, Predict, and Evaluate
+## 10. Train, Predict, and Evaluate
 
 Modeling scripts currently kept for public workflow documentation are:
 
@@ -64,7 +130,7 @@ Modeling scripts currently kept for public workflow documentation are:
 - `scripts/predict_models.py`
 - `scripts/evaluate_models.py`
 
-## 6. Plot Outputs
+## 11. Plot Outputs
 
 Generated plots are written under `plots/` and ignored by Git. Selected figures
 or reproducibility bundles should be archived externally on Zenodo.
