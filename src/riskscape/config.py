@@ -10,6 +10,27 @@ import os
 import yaml
 
 
+def load_dotenv(env_file: Path) -> None:
+    """
+    Load simple KEY=VALUE pairs from a local .env file.
+    """
+    if not env_file.exists():
+        return
+
+    with open(env_file, "r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("\"'")
+
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def find_project_root() -> Path:
     """
     Find the project root by locating config.yaml.
@@ -26,6 +47,7 @@ def find_project_root() -> Path:
 
 # Resolve project root
 PROJECT_ROOT = find_project_root()
+load_dotenv(PROJECT_ROOT / ".env")
 
 # Select config file (override or default)
 CONFIG_NAME = os.environ.get("RISKCAPE_CONFIG", "config.yaml")

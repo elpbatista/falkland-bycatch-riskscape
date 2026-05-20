@@ -1,19 +1,96 @@
-# MS Capstone Project
+# Falkland Bycatch Riskscape Workflow
 
-## Bycatch Riskscape Workflow for Falkland Islands Fisheries: A Proof-of-Concept
+Reusable workflow components for building dynamic bycatch riskscapes from
+species observations, fishing effort, environmental data, and spatial reference
+layers.
 
-This MS capstone project develops and tests a repeatable workflow for creating dynamic “bycatch riskscapes” that integrate species movement data, fishing effort, and oceanographic conditions to forecast spatial overlap and bycatch risk. Focusing on one to two specimen species with robust data availability—southern giant petrel (Macronectes giganteus) and South American fur seal (Arctocephalus australis)—the project will demonstrate a proof-of-concept system for the Falkland Islands fisheries zone. The workflow emphasizes technical rigor, reproducibility, and scalability, using satellite-derived seascapes, AIS/VMS tracking data, species telemetry, and wind data to model spatiotemporal risk zones. This foundational work establishes the data processing pipeline, modeling framework, and validation approach necessary for broader application across additional species and regions.
+The repository is organized as a Python package plus executable workflow
+scripts. The Falkland Islands case study is the worked example, but the project
+is being prepared as a template that can be adapted to other regions, species,
+and fisheries.
 
-## Objectives
+## What This Repository Contains
 
-### Objective 1: Develop a repeatable workflow for constructing dynamic bycatch riskscapes <!-- omit in toc -->
+- `src/riskscape/`: reusable Python package code.
+- `scripts/`: workflow entry points for downloading, feature building, modeling,
+  prediction, evaluation, and plotting.
+- `notebooks/`: exploratory or tutorial notebooks for selected workflow stages.
+- `docs/`: current workflow, data, authentication, publishing, and script
+  inventory notes.
+- `config.yaml`: default Falkland Islands workflow configuration.
+- `reference/README.md`: instructions for restoring public reference layers.
 
-Design and document a standardized, modular workflow for integrating multi-source data (species tracking, fishing effort, oceanographic variables, wind patterns) into spatially and temporally explicit bycatch risk models. The workflow will include data acquisition, preprocessing, feature engineering, model training, validation, and visualization protocols. Emphasis will be placed on reproducibility, code documentation, and version control to enable future applications to additional species and study areas.
+Generated data, plots, downloaded reference layers, and model outputs are not
+stored in Git.
 
-### Objective 2: Model bycatch risk for specimen species using satellite seascapes, wind, telemetry, and fishing effort data <!-- omit in toc -->
+## Data Policy
 
-Apply the riskscape workflow to southern giant petrel and South American fur seal, leveraging available GPS/PTT telemetry data, observer records, AIS/VMS fishing vessel tracking, and environmental covariates (sea surface temperature, chlorophyll-a, sea surface height, eddies, and wind speed/direction). Integrate wind as a key environmental driver influencing seabird foraging range, flight behavior, and habitat accessibility. Use machine learning approaches (Random Forest, LSTM neural networks) to forecast high-risk zones based on species presence probability, fleet overlap, and environmental conditions. Stratify models by season and behavioral state (e.g., foraging vs. commuting) to capture temporal variability in risk.
+This repository tracks code, documentation, and lightweight configuration. It
+does not track generated or downloaded data folders such as:
 
-### Objective 3: Validate riskscape predictions and assess model performance <!-- omit in toc -->
+- `data/`
+- `plots/`
+- `outputs/`
+- downloaded files under `reference/`
 
-Evaluate model accuracy using independent datasets, including fisheries observer bycatch records, cross-validation techniques, and spatial holdout tests. Assess model sensitivity to data resolution, environmental variables, and temporal scale. Document model performance metrics (AUC, precision-recall, spatial correlation) and identify key predictors of bycatch risk for each specimen species. Compare predicted risk zones with known bycatch hotspots to refine the modeling approach and inform data needs for future expansion.
+Reference layers can be restored with:
+
+```bash
+python scripts/download_reference_data.py
+```
+
+Larger release bundles for derived data, selected plots, and model outputs are
+intended to be archived externally on Zenodo.
+
+Some source datasets may require provider credentials, access approval, or
+collaborator permission. See `docs/datasets.md` and `docs/authentication.md`.
+
+## Setup
+
+Create and activate a Python environment, then install the package in editable
+mode:
+
+```bash
+pip install -e .
+```
+
+Copy the environment template if you need local credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` locally. Do not commit it.
+
+## Basic Workflow
+
+The public workflow is still being formalized. The current high-level sequence
+is:
+
+1. Restore public reference layers.
+2. Download configured environmental and fishing-effort data.
+3. Build the spatial grid and lookup tables.
+4. Build environmental, fishing-effort, and species-presence feature tables.
+5. Assemble model-ready datasets.
+6. Train and evaluate models.
+7. Generate predictions and plots.
+
+See `docs/workflow.md` for the current workflow map. The script inventory in
+`docs/script_inventory.md` tracks which scripts are intended to remain part of
+the documented workflow.
+
+## Credentials
+
+Credentials must live outside committed files. The current convention is:
+
+- Earthdata credentials in `~/.netrc`
+- Copernicus Marine credentials through `copernicusmarine login`
+- CDS credentials in `~/.cdsapirc`
+- Global Fishing Watch token in local `.env` as `GFW_TOKEN`
+
+See `docs/authentication.md` for details.
+
+## Publishing Status
+
+This repository is mid-refactor for public release. The current checklist is in
+`docs/publishing_checklist.md`.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 import gfwapiclient as gfw
@@ -63,9 +64,11 @@ async def fetch_with_retry(
 
 async def _async_download(dataset_dir: Path) -> None:
     """Async download implementation."""
-    token = cfg["gfw"]["token"]
+    token = os.environ.get("GFW_TOKEN") or cfg.get("gfw", {}).get("token")
     if not token:
-        raise RuntimeError("Missing GFW token in config.yaml")
+        raise RuntimeError(
+            "Missing GFW token. Set GFW_TOKEN in the environment or local .env."
+        )
 
     client = gfw.Client(access_token=token)
     geojson = get_buffered_polygon_geojson()

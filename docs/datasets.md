@@ -1,45 +1,77 @@
 # Datasets
 
-## Falkland Islands fisheries grid squares
+This page records source datasets used or referenced by the Falkland Islands
+case-study workflow. It is not a complete data release manifest.
 
-The file shows the grid squares used as reference unit for the commercial catches around the Falkland Islands.
+Generated data products are not tracked in Git. Public reference layers can be
+restored with `scripts/download_reference_data.py`; larger derived data and
+plot bundles are intended for Zenodo releases.
 
-The full grid covers an area from 47 to 57 latitude South and 64 to 52 longitude West. The squares are 15 min of lat (0.25), by 30 min longitude (0.50). They are labelled progressively using alphabetical letters, from AA to AZ going to west to east, WW to YM from North to South. There are not "I" and "O" as they can be mistaken as 1 and 0. Each grid square is associated to a fishing licence. The file is provided with the latest fisheries licences (fishing allowed or fishing restricted). Individual shape files for the different fisheries licences are available on request to the data owner.
+## Public Reference Layers
 
+### Falkland Islands Fisheries Grid Squares
+
+Grid squares used as reference units for commercial catches around the Falkland
+Islands.
+
+Source:
 <https://dataportal.saeri.org/dataset/falkland-islands-fisheries-grid-squares>
 
-## Falkland Islands Fisheries observer database
+Local destination:
+`reference/fisheries_grid_squares/`
 
-Since about 2008 bird abundance and interaction data have been collected and seabird & mammal mortality data were recorded since 1988. Data can be provided in an anonymysed and summarised format.
+### Falkland Islands Conservation Zones
 
-<https://dataportal.saeri.org/dataset/falkland-islands-fisheries-observer-database>
+Falkland Islands Conservation Zones used for fisheries activities, including
+the Falkland Islands Conservation Zone and Falkland Islands Outer Conservation
+Zone.
 
-Download link not available publicly. Please contact SAERI for access.
-
-## Falkland Islands boundaries
-
-The dataset (polygon shape file) describes the Falkland Islands boundaries updated in 2017.
-
-<https://dataportal.saeri.org/dataset/falkland-islands-boundaries>
-
-## Falkland Islands Conservation Zones
-
-Falkland Islands Conservation Zones defined for fisheries activities. Two zones were identified and classified as inner (FICZ) and outer (FOCZ) conservation zones. They are currently in use and officially recognised by the Falkland Islands Governement and international laws.
-
+Source:
 <https://dataportal.saeri.org/dataset/falkland-islands-conservation-zones>
 
-## Falkland Islands 3 nautical miles no fisheries zones
+Local destination:
+`reference/ukho_ficz_focz_limits/`
 
-Three nautical miles area around the Falkland Island delimiting a no fisheries zone.
+### Natural Earth Land and Coastline
 
-<https://dataportal.saeri.org/dataset/falkland-islands-3-nautical-miles-no-fisheries-zones>
+Natural Earth 10m land and coastline layers are used for basemap context.
 
-## Gebco bathymetry one minute arc grid
+Source:
+<https://www.naturalearthdata.com/>
 
-Gebco a global one arc-minute grid. Released: 2003, updated: 2008 On behalf of GEBCO, the GEBCO one arc-minute grid is available to download from the British Oceanographic Data Centre (BODC).
+Local destinations:
 
-<https://dataportal.saeri.org/dataset/gebco-bathymetry-one-minute-arc-grid>
+- `reference/ne_10m_land/`
+- `reference/ne_10m_coastline/`
 
-<https://www.gebco.net/data-products/gridded-bathymetry-data#area>
+## Restricted or Provider-Gated Inputs
 
-## Global Fishing Watch fishing effort data
+### Falkland Islands Fisheries Observer Database
+
+Observer data include seabird abundance, interaction records, and seabird and
+mammal mortality records. Access may require permission and data-use agreements.
+
+Source:
+<https://dataportal.saeri.org/dataset/falkland-islands-fisheries-observer-database>
+
+### Species Telemetry
+
+Species movement observations used by the case study may come from collaborator
+or partner datasets. These data should not be redistributed unless access terms
+explicitly allow it.
+
+### Global Fishing Watch Fishing Effort
+
+Fishing-effort data are downloaded through Global Fishing Watch APIs. API
+access requires a token configured outside Git as `GFW_TOKEN`.
+
+See `docs/authentication.md`.
+
+## Environmental Inputs
+
+The default configuration references environmental inputs such as sea-surface
+temperature, chlorophyll-a, sea-surface height, wind, and bathymetry. These
+inputs are downloaded or prepared through provider-specific tooling and are
+written under ignored `data/` paths.
+
+See `config.yaml` and `docs/authentication.md` for provider setup.

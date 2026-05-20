@@ -13,6 +13,13 @@ reusable riskscape workflow/template.
   layers.
 - Start `docs/script_inventory.md` for scripts that should be kept and
   documented.
+- Move the GFW token convention to local `.env` / `GFW_TOKEN` and remove token
+  values from committed YAML files.
+- Remove duplicate `docs/authentication copy.md`.
+- Confirm generated packaging metadata such as `src/riskscape.egg-info/` are
+  not tracked and remain ignored.
+- Rewrite the root `README.md` for the reusable workflow/template audience.
+- Prune stale docs and keep only the current public documentation set.
 
 ## Credential and Configuration Policy
 
@@ -21,8 +28,8 @@ reusable riskscape workflow/template.
   ignored `.env` file.
 - `.env.example` is committed only as a template.
 - `config.run.yaml` needs a design decision before publishing. It comes from an
-  older notebook-reproduction workflow and may mix runtime state, credentials,
-  date ranges, local execution choices, and reproducibility metadata.
+  older notebook-reproduction workflow and may mix runtime state, date ranges,
+  local execution choices, and reproducibility metadata.
 
 ## External Archive Policy
 
@@ -44,16 +51,11 @@ reusable riskscape workflow/template.
   development material.
 - Decide which `data/` subfolders, plots, and model outputs are safe/useful to
   package for Zenodo.
-- Review `docs/authentication copy.md` and other duplicate/internal docs before
-  publishing.
-- Review the tracked Postman collection and docs for credential placeholders,
-  outdated endpoints, and public relevance.
+- Review `docs/code_style_guide.md` for whether it should remain public or be
+  replaced with a shorter contributor note.
 
 ## Still To Do
 
-- Remove generated packaging metadata such as `src/riskscape.egg-info/` if still
-  present in Git history or the working tree.
 - Add or confirm project license.
 - Add citation guidance.
-- Rewrite the root `README.md` around the reusable workflow/template audience.
 - Expand `pyproject.toml` with package metadata and dependencies.
