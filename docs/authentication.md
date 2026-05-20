@@ -1,10 +1,12 @@
 # Dataset Authentication Guide
 
-This project downloads datasets from three external providers. All require valid credentials before any data can be retrieved.
+This project downloads datasets from external providers. Most require valid
+credentials before data can be retrieved.
 
 - **NASA PO.DAAC** (MUR SST) – accessed over HTTPS using [Earthdata Login](https://urs.earthdata.nasa.gov/)
 - **Copernicus Marine Service (CMEMS)** – accessed through the `copernicusmarine` CLI
 - **Copernicus Climate Data Store (CDS / ERA5)** – accessed through the `cdsapi` Python client
+- **Global Fishing Watch (GFW)** – accessed with an API token stored outside the repository
 
 ---
 
@@ -163,19 +165,37 @@ If no authentication error appears, the configuration is correct.
 
 ---
 
-## 4. Credential Storage Locations
+## 4. Global Fishing Watch
+
+Global Fishing Watch API access uses a bearer token.
+
+1. Request or create a token through Global Fishing Watch.
+2. Copy `.env.example` to `.env`.
+3. Set:
+
+   ```text
+   GFW_TOKEN=YOUR_TOKEN
+   ```
+
+The `.env` file is ignored by Git and must not be committed. Pipeline code
+should read this value from the environment rather than from `config.yaml`.
+
+---
+
+## 5. Credential Storage Locations
 
 | Service               | Credential File                  |
 |-----------------------|----------------------------------|
 | Earthdata             | `~/.netrc`, `~/.urs_cookies`     |
 | Copernicus Marine     | Stored by `copernicusmarine` CLI |
 | Copernicus CDS (ERA5) | `~/.cdsapirc`                    |
+| Global Fishing Watch  | `.env` / `GFW_TOKEN`             |
 
 (Windows equivalents use `%USERPROFILE%`.)
 
 ---
 
-## 5. Security Best Practices
+## 6. Security Best Practices
 
 - **Never commit credentials to version control**
 - Do not store passwords or API keys in:
@@ -189,5 +209,6 @@ Recommended approach:
 - `.netrc` + script-managed cookies for Earthdata  
 - `copernicusmarine login` for CMEMS  
 - `.cdsapirc` for CDS (ERA5)  
+- `.env` + `GFW_TOKEN` for Global Fishing Watch
 
 Keep these files outside the repository and secured with proper file permissions.
