@@ -13,15 +13,12 @@ if str(_SRC) not in sys.path:
 
 import argparse
 import calendar
-import shutil
-import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 import duckdb
 import geopandas as gpd
-import joblib
 import matplotlib
 
 matplotlib.use("Agg")
@@ -32,13 +29,9 @@ from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
-from sklearn.metrics import pairwise_distances
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
-from riskscape.model.predict import output_columns
-from riskscape.utils.dates import normalize_date_column
 from riskscape.visualization.base_map import (
     MAP_CRS,
     MapBounds,
@@ -46,11 +39,14 @@ from riskscape.visualization.base_map import (
     draw_reference_layers,
     load_reference_layers,
 )
+from riskscape.visualization.monthly_maps import add_centered_colorbar_axis
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
     SPECIES_USE_LOG_COLOR_MAX,
     MapStyle,
     aggregation_name,
+    color_norm,
+    draw_prediction_colorbar,
     figure_root,
     load_predictions,
     plot_prediction_df_map,
@@ -67,8 +63,6 @@ PREDICTION_PRODUCT = "joint"
 SPECIES = ["BBAL", "SAFS"]
 AGG = "non_zero_mean"
 SEASCAPE_PREDICTION_PREFIX = "seascape"
-BATCH_ROWS = 250_000
-SOFT_TEMPERATURE_SCALE = 0.35
 
 SURFACE_ROOT = paths["data"] / "modeling" / "seascape_species_use"
 FEATURE_GRID_ROOT = paths["data"] / "modeling" / "feature_grid"
@@ -153,6 +147,8 @@ def shared_linear_style(style: MapStyle, values: pd.Series) -> MapStyle:
 def shared_binned_style(style: MapStyle, values: pd.Series) -> MapStyle:
     """Return a fixed-boundary binned style shared across panels."""
     if style.colorbar_labels is None:
+        return style
+    if style.colorbar_boundaries is not None:
         return style
 
     lower = style.color_min if style.color_min is not None else 0.0
@@ -324,14 +320,6 @@ def monthly_matrix_figure_path(
     )
 
 
-def load_seascape_model(model_name: str):
-    """Load a KMeans seascape model saved by the classifier script."""
-    import classify_environmental_seascapes as seascapes
-
-    sys.modules["__main__"].SeascapeModel = seascapes.SeascapeModel
-    return joblib.load(seascape_model_path(model_name))
-
-
 def seascape_assignment_column(model_name: str) -> str:
     """Return class column name for one seascape assignment table."""
     return "kmeans_k15" if model_name == "kmeans_k15" else "seascape"
@@ -369,80 +357,6 @@ def seascape_species_values(model_name: str, year: int) -> dict[str, np.ndarray]
     return values
 
 
-def build_hard_prediction_product(
-    year: int,
-    model_name: str,
-) -> Path:
-    """Write daily predictions by direct hard seascape assignment."""
-    assignment_file = seascape_assignment_path(year, model_name)
-    out_file = seascape_prediction_path_for_model(year, model_name)
-
-    if not assignment_file.exists():
-        raise FileNotFoundError(f"Seascape assignments not found: {assignment_file}")
-
-    species_values = seascape_species_values(model_name, year)
-    fishing = load_fishing_log(year)
-    frames = []
-
-    class_col = seascape_assignment_column(model_name)
-    assignments = pd.read_parquet(
-        assignment_file,
-        columns=["h3", "date", class_col],
-    )
-    assignments = normalize_date_column(assignments)
-    assignments["seascape"] = assignments[class_col].astype("int16")
-    assignments = assignments.merge(fishing, on=["h3", "date"], how="left")
-    assignments["fishing_activity_log"] = (
-        assignments["fishing_activity_log"].fillna(0.0).astype("float32")
-    )
-
-    seascape_ids = assignments["seascape"].to_numpy(dtype="int16")
-    fishing_raw = np.expm1(
-        assignments["fishing_activity_log"].to_numpy(dtype="float64")
-    )
-    base = assignments[["h3", "date", "fishing_activity_log"]].reset_index(
-        drop=True
-    )
-
-    for species, values in species_values.items():
-        species_frame = base.copy()
-        species_frame["species"] = species
-        use_log = values[seascape_ids]
-        species_frame["species_use_log_pred"] = use_log.astype("float32")
-        species_frame["risk_log_pred"] = np.log1p(
-            np.expm1(use_log) * fishing_raw
-        ).astype("float32")
-        frames.append(species_frame)
-
-    predictions = normalize_date_column(pd.concat(frames, ignore_index=True))
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    predictions[output_columns(seascape_prediction_model_name(model_name))].to_parquet(
-        out_file,
-        index=False,
-        compression="zstd",
-    )
-
-    return out_file
-
-
-def soft_membership_temperature(year: int, model_name: str) -> float:
-    """Use the median nearest-centroid distance as the soft-membership scale."""
-    path = seascape_assignment_path(year, model_name)
-    if not path.exists():
-        raise FileNotFoundError(f"Seascape assignments not found: {path}")
-
-    with duckdb.connect(database=":memory:") as con:
-        value = con.execute(
-            "SELECT median(kmeans_k15_distance) FROM read_parquet($path)",
-            {"path": str(path)},
-        ).fetchone()[0]
-
-    if value is None or value <= 0:
-        raise ValueError("Cannot derive positive soft-membership temperature")
-
-    return float(value)
-
-
 def load_fishing_log(year: int) -> pd.DataFrame:
     """Load H3/day fishing activity in the existing log convention."""
     path = fishing_path(year)
@@ -454,133 +368,6 @@ def load_fishing_log(year: int) -> pd.DataFrame:
         fishing["fishing_activity"].clip(lower=0.0)
     ).astype("float32")
     return fishing[["h3", "date", "fishing_activity_log"]]
-
-
-def build_soft_prediction_batch(
-    batch: pd.DataFrame,
-    payload,
-    species_values: dict[str, np.ndarray],
-    fishing: pd.DataFrame,
-    temperature: float,
-) -> pd.DataFrame:
-    """Build seascape-conditioned predictions for one H3/day batch."""
-    features = payload.features
-    out = batch.replace([np.inf, -np.inf], np.nan).dropna(subset=features)
-    if out.empty:
-        return pd.DataFrame(
-            columns=["h3", "date", "species", "species_use_log_pred"]
-        )
-
-    x = out[features].to_numpy(dtype="float64")
-    x_scaled = payload.scaler.transform(x)
-    distances = pairwise_distances(x_scaled, payload.model.cluster_centers_)
-    scaled = -0.5 * np.square(distances / temperature)
-    scaled = scaled - scaled.max(axis=1, keepdims=True)
-    weights = np.exp(scaled)
-    weights = weights / weights.sum(axis=1, keepdims=True)
-
-    base = out[["h3", "date"]].reset_index(drop=True)
-    frames = []
-    for species, values in species_values.items():
-        species_frame = base.copy()
-        species_frame["species"] = species
-        species_frame["species_use_log_pred"] = (
-            weights @ values
-        ).astype("float32")
-        frames.append(species_frame)
-
-    predictions = pd.concat(frames, ignore_index=True)
-    predictions = predictions.merge(fishing, on=["h3", "date"], how="left")
-    predictions["fishing_activity_log"] = (
-        predictions["fishing_activity_log"].fillna(0.0).astype("float32")
-    )
-    species_use = np.expm1(
-        predictions["species_use_log_pred"].to_numpy(dtype="float64")
-    )
-    fishing = np.expm1(
-        predictions["fishing_activity_log"].to_numpy(dtype="float64")
-    )
-    predictions["risk_log_pred"] = np.log1p(species_use * fishing).astype("float32")
-    return predictions
-
-
-def combine_prediction_parts(parts_dir: Path, out_file: Path) -> None:
-    """Combine batch parquet parts into the standard prediction partition file."""
-    with duckdb.connect(database=":memory:") as con:
-        con.execute(
-            f"""
-            COPY (
-                SELECT * FROM read_parquet('{parts_dir.as_posix()}/*.parquet')
-            )
-            TO '{out_file.as_posix()}'
-            (FORMAT PARQUET, COMPRESSION ZSTD)
-            """
-        )
-
-
-def build_seascape_prediction_product(
-    year: int,
-    model_name: str,
-    batch_rows: int,
-) -> Path:
-    """Write a standard prediction product for soft seascape-conditioned maps."""
-    if model_name == "kmeans_k15" or model_name.startswith("som_"):
-        return build_hard_prediction_product(year=year, model_name=model_name)
-
-    feature_file = feature_grid_path(year)
-    out_file = seascape_prediction_path_for_model(year, model_name)
-
-    if not feature_file.exists():
-        raise FileNotFoundError(f"Feature grid not found: {feature_file}")
-
-    payload = load_seascape_model(model_name)
-    species_values = seascape_species_values(model_name, year)
-    fishing = load_fishing_log(year)
-    temperature = (
-        soft_membership_temperature(year, model_name)
-        * SOFT_TEMPERATURE_SCALE
-    )
-
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    parts_dir = out_file.parent / "_soft_parts"
-    if parts_dir.exists():
-        shutil.rmtree(parts_dir)
-    parts_dir.mkdir(parents=True)
-
-    parquet_file = pq.ParquetFile(feature_file)
-    columns = ["h3", "date", *payload.features]
-    part_index = 0
-    for record_batch in parquet_file.iter_batches(
-        batch_size=batch_rows,
-        columns=columns,
-    ):
-        batch = record_batch.to_pandas()
-        predictions = build_soft_prediction_batch(
-            batch=batch,
-            payload=payload,
-            species_values=species_values,
-            fishing=fishing,
-            temperature=temperature,
-        )
-        if predictions.empty:
-            continue
-        out = normalize_date_column(
-            predictions[output_columns(seascape_prediction_model_name(model_name))]
-        )
-        out.to_parquet(
-            parts_dir / f"part_{part_index:05d}.parquet",
-            index=False,
-            compression="zstd",
-        )
-        part_index += 1
-
-    if part_index == 0:
-        raise ValueError("No seascape-conditioned prediction rows were written")
-
-    combine_prediction_parts(parts_dir, out_file)
-    shutil.rmtree(parts_dir)
-
-    return out_file
 
 
 def monthly_prediction_summary(
@@ -642,6 +429,9 @@ def matrix_norm(
     values = values[values > 0]
     if values.empty:
         raise ValueError(f"No positive monthly values found for {value_name}")
+
+    if style.colorbar_labels is not None:
+        return color_norm(values, shared_binned_style(style, values))
 
     if style.color_max is not None:
         vmax = float(style.color_max)
@@ -749,6 +539,8 @@ def plot_monthly_matrix(
     value_name = f"{value_col}_{aggregation_name(agg)}"
     if relative_scale:
         monthly = apply_relative_scale(monthly, value_name)
+    if style.colorbar_labels is not None:
+        style = shared_binned_style(style, cast(pd.Series, monthly[value_name]))
     grid = load_grid(uint64=True)
     land, coast = load_reference_layers()
     bounds = MapBounds.from_config()
@@ -800,20 +592,30 @@ def plot_monthly_matrix(
         hspace=0.15,
     )
 
-    cax = fig.add_axes((0.88, 0.20, 0.025, 0.60))
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
-        cax=cax,
-    )
-    cbar.set_label(
-        f"Relative {style.colorbar_title or metric_label}"
-        if relative_scale
-        else style.colorbar_title or metric_label
-    )
-    cbar.set_ticks([])
-    cbar.ax.tick_params(which="both", length=0, labelleft=False, labelright=False)
-    for spine in cbar.ax.spines.values():
-        spine.set_visible(False)
+    if style.colorbar_labels is not None:
+        cax = add_centered_colorbar_axis(fig, len(style.colorbar_labels))
+        draw_prediction_colorbar(
+            axes_flat[-1],
+            value_col=value_name,
+            norm=norm,
+            style=style,
+            cax=cax,
+        )
+    else:
+        cax = fig.add_axes((0.88, 0.20, 0.025, 0.60))
+        cbar = fig.colorbar(
+            ScalarMappable(norm=norm, cmap=plt.get_cmap(style.cmap)),
+            cax=cax,
+        )
+        cbar.set_label(
+            f"Relative {style.colorbar_title or metric_label}"
+            if relative_scale
+            else style.colorbar_title or metric_label
+        )
+        cbar.set_ticks([])
+        cbar.ax.tick_params(which="both", length=0, labelleft=False, labelright=False)
+        for spine in cbar.ax.spines.values():
+            spine.set_visible(False)
 
     out_file = monthly_matrix_figure_path(
         year=year,
@@ -848,12 +650,6 @@ def parse_args() -> argparse.Namespace:
         default=AGG,
         choices=("non_zero_median", "non_zero_mean", "mean", "median", "max"),
         help="Single H3/day vertical-stack aggregation to generate for this run.",
-    )
-    parser.add_argument("--batch-rows", type=int, default=BATCH_ROWS)
-    parser.add_argument(
-        "--skip-build",
-        action="store_true",
-        help="Reuse an existing seascape prediction product instead of rebuilding it.",
     )
     parser.add_argument(
         "--months",
@@ -893,25 +689,35 @@ def main() -> int:
     """Run seascape-conditioned prediction maps."""
     args = parse_args()
     out_product = seascape_prediction_path_for_model(args.year, args.model_name)
-    if args.skip_build:
-        if not out_product.exists():
-            raise FileNotFoundError(f"Prediction product not found: {out_product}")
-        print(f"Using existing standard prediction product: {out_product}")
-    else:
-        out_product = build_seascape_prediction_product(
-            year=args.year,
-            model_name=args.model_name,
-            batch_rows=args.batch_rows,
+    if not out_product.exists():
+        raise FileNotFoundError(
+            "Seascape prediction product not found: "
+            f"{out_product}. Build it before running plot scripts."
         )
-        print(f"Saved standard prediction product: {out_product}")
+    print(f"Using existing standard prediction product: {out_product}")
 
     if args.monthly_matrix:
+        predictions: pd.DataFrame | None = None
+        species_style: MapStyle | None = None
+        risk_style: MapStyle | None = None
+        if "risk_log_pred" in args.matrix_values:
+            predictions = load_predictions(
+                year=args.year,
+                model_name=seascape_prediction_model_name(args.model_name),
+                product_name=PREDICTION_PRODUCT,
+            )
+            species_style, risk_style = shared_styles(
+                predictions=predictions,
+                species=list(args.species),
+                agg=args.agg,
+            )
+
         for species in args.species:
             for value_col in args.matrix_values:
                 style = (
-                    SPECIES_USE_STYLE
+                    (species_style or SPECIES_USE_STYLE)
                     if value_col == "species_use_log_pred"
-                    else REALIZED_RISK_STYLE
+                    else (risk_style or REALIZED_RISK_STYLE)
                 )
                 monthly = monthly_prediction_summary(
                     year=args.year,

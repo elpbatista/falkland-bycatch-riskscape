@@ -26,7 +26,7 @@ from riskscape.config import paths
 from riskscape.visualization.maps import plausibility_path
 
 
-MODEL_NAME = "bayesian_gmm"
+MODEL_NAME = "bayesian_gmm_k30"
 PRODUCT_NAME = "joint"
 YEARS = list(range(2014, 2024))
 OUTPUT_ROOT = paths["plots"] / "plausibility"

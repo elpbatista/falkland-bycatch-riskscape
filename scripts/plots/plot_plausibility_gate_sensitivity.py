@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import cast
 
 import duckdb
-import geopandas as gpd
 import matplotlib
 
 matplotlib.use("Agg")
@@ -40,22 +39,14 @@ from plot_prediction_maps import (
 )
 from riskscape.config import paths
 from riskscape.grid import load_grid
-from riskscape.visualization.base_map import (
-    MAP_CRS,
-    MapBounds,
-    OCEAN_COLOR,
-    draw_bathymetry_base_layer,
-    draw_reference_layers,
-    load_reference_layers,
-)
+from riskscape.visualization.base_map import MapBounds, load_reference_layers
+from riskscape.visualization.weekly_maps import format_week_panel
 from riskscape.visualization.maps import (
     MINIMUM_EFFORT_UNIT,
     MapStyle,
     color_norm,
+    draw_h3_value_panel,
     draw_prediction_colorbar,
-    draw_prediction_layer,
-    draw_uncertain_cell_outline,
-    plottable_values,
     summarize_hazard_h3,
     summarize_plausibility_h3,
 )
@@ -283,57 +274,32 @@ def plot_sensitivity_panel(
     coast: gpd.GeoDataFrame,
 ) -> None:
     """Draw one plausibility-gate sensitivity panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
-    draw_bathymetry_base_layer(ax, legend=False, draw_grid=False)
+    format_week_panel(
+        ax,
+        species=species,
+        week=0,
+        bounds=bounds,
+        title=panel_title(species, cut),
+    )
 
     subset = surfaces[
         (surfaces["species"] == species)
         & np.isclose(surfaces["gate_cut"], cut)
     ].copy()
-    plot_gdf = grid.merge(
-        subset[["h3", "hazard_log_pred", "low_plausibility"]],
-        on="h3",
-        how="left",
+    subset["low_plausibility"] = subset["low_plausibility"].fillna(False).astype(bool)
+    draw_h3_value_panel(
+        ax=ax,
+        grid=grid,
+        values=subset[["h3", "hazard_log_pred", "low_plausibility"]],
+        value_col="hazard_log_pred",
+        norm=norm,
+        style=style,
+        bounds=bounds,
+        land=land,
+        coast=coast,
+        outline_col="low_plausibility",
+        draw_bathymetry=True,
     )
-
-    plot_gdf["low_plausibility"] = (
-        plot_gdf["low_plausibility"].fillna(False).astype(bool)
-    )
-
-    try:
-        plot_values = plottable_values(
-            plot_gdf,
-            value_col="hazard_log_pred",
-            style=style,
-        )
-    except ValueError:
-        plot_values = plot_gdf.iloc[0:0]
-
-    if not plot_values.empty:
-        draw_prediction_layer(
-            ax=ax,
-            gdf=plot_values,
-            value_col="hazard_log_pred",
-            norm=norm,
-            style=style,
-        )
-        draw_uncertain_cell_outline(
-            ax=ax,
-            gdf=plot_values,
-            outline_col="low_plausibility",
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
-    )
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(panel_title(species, cut), fontsize=10)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
 
 
 def add_risk_colorbar(

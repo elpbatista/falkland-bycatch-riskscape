@@ -12,7 +12,6 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import argparse
-import calendar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -30,12 +29,20 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
-from riskscape.visualization.base_map import (
-    MAP_CRS,
-    MapBounds,
-    OCEAN_COLOR,
-    draw_reference_layers,
-    load_reference_layers,
+from riskscape.visualization.legends import label_colorbar_extremes
+from riskscape.visualization.base_map import MapBounds, load_reference_layers
+from riskscape.visualization.maps import draw_h3_column_panel
+from riskscape.visualization.monthly_maps import (
+    add_monthly_colorbar_axis,
+    create_monthly_map_grid,
+    format_month_panel,
+    month_axes,
+    save_monthly_map,
+)
+
+from plot_environmental_single_date_maps import (  # noqa: E402
+    endpoint_label,
+    feature_limits,
 )
 
 
@@ -57,21 +64,31 @@ class VariableSpec:
     quantile: float = 0.99
 
 
-# Comment variables in or out here to choose which seasonal matrices to make.
-# The True sets center_zero=True for that variable.
-# So values below zero and above zero are shown symmetrically around 0, which is useful for anomalies because negative and positive departures are both meaningful.
+# Standard environmental monthly matrices. Use --variables to plot a subset.
 VARIABLE_SPECS = [
-    # VariableSpec("sst", "SST", "SST (K)", "turbo"),
-    # VariableSpec("ssh", "SSH", "SSH (m)", "viridis"),
-    # VariableSpec("wind_speed", "Wind Speed", "Wind speed (m/s)", "magma"),
-    VariableSpec("chl_log", "Log-CHL", "Log-CHL", "YlGn"),
-    # VariableSpec("sst_anom", "SST Anomaly", "SST anomaly (K)", "RdBu_r", True),
-    # VariableSpec("ssh_anom", "SSH Anomaly", "SSH anomaly (m)", "RdBu_r", True),
-    # VariableSpec("wind_speed_anom", "Wind-Speed Anomaly", "Wind-speed anomaly (m/s)", "RdBu_r", True),
-    # VariableSpec("chl_log_anom", "Log-CHL Anomaly", "Log-CHL anomaly", "RdBu_r", True),
-    # VariableSpec("sst_grad", "SST Gradient", "SST local gradient", "magma"),
-    # VariableSpec("ssh_grad", "SSH Gradient", "SSH local gradient", "viridis"),
-    # VariableSpec("chl_log_grad", "Log-CHL Gradient", "Log-CHL local gradient", "YlGn"),
+    VariableSpec("sst", "SST", "SST (°C)", "turbo"),
+    VariableSpec("ssh", "SSH", "SSH (m)", "viridis"),
+    VariableSpec("wind_speed", "Wind Speed", "Wind speed (m/s)", "magma"),
+    VariableSpec("chl_log", "CHL", "CHL (mg m^-3)", "YlGn"),
+    VariableSpec("sst_anom", "SST Anomaly", "SST anomaly (°C)", "RdBu_r", True),
+    VariableSpec("ssh_anom", "SSH Anomaly", "SSH anomaly (m)", "RdBu_r", True),
+    VariableSpec(
+        "wind_speed_anom",
+        "Wind-Speed Anomaly",
+        "Wind-speed anomaly (m/s)",
+        "RdBu_r",
+        True,
+    ),
+    VariableSpec(
+        "chl_log_anom",
+        "CHL Anomaly",
+        "CHL anomaly (mg m^-3)",
+        "RdBu_r",
+        True,
+    ),
+    VariableSpec("sst_grad", "SST Gradient", "SST local gradient", "magma"),
+    VariableSpec("ssh_grad", "SSH Gradient", "SSH local gradient", "viridis"),
+    VariableSpec("chl_log_grad", "CHL Gradient", "CHL local gradient (mg m^-3)", "YlGn"),
 ]
 
 
@@ -142,41 +159,6 @@ def summarize_monthly_features(
     return pd.DataFrame(monthly)
 
 
-def feature_norm(
-    values: pd.Series,
-    spec: VariableSpec,
-) -> colors.Normalize:
-    """Return a shared color scale for all monthly panels."""
-    clean = values.dropna()
-
-    if clean.empty:
-        raise ValueError(f"No values found for {spec.column}")
-
-    if spec.center_zero:
-        limit = float(clean.abs().quantile(spec.quantile))
-        if limit <= 0:
-            limit = float(clean.abs().max())
-        if limit <= 0:
-            limit = 1.0
-        return colors.TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit)
-
-    vmin = float(clean.quantile(1.0 - spec.quantile))
-    vmax = float(clean.quantile(spec.quantile))
-
-    if vmax <= vmin:
-        vmin = float(clean.min())
-        vmax = float(clean.max())
-    if vmax <= vmin:
-        vmax = vmin + 1.0
-
-    return colors.Normalize(vmin=vmin, vmax=vmax)
-
-
-def month_panel_title(month: int) -> str:
-    """Return a compact month title."""
-    return calendar.month_abbr[month]
-
-
 def plot_month_panel(
     ax: Axes,
     grid: gpd.GeoDataFrame,
@@ -189,36 +171,21 @@ def plot_month_panel(
     coast: gpd.GeoDataFrame,
 ) -> None:
     """Draw one monthly environmental feature panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
+    format_month_panel(ax, month=month, bounds=bounds)
 
     month_mask = cast(pd.Series, monthly["month"]).eq(month)
     month_values = monthly.loc[month_mask, ["h3", spec.column]]
-    plot_gdf = grid.merge(month_values, on="h3", how="left")
-    plot_gdf = plot_gdf.dropna(subset=[spec.column])
-
-    if not plot_gdf.empty:
-        plot_gdf.plot(
-            ax=ax,
-            column=spec.column,
-            cmap=spec.cmap,
-            norm=norm,
-            legend=False,
-            edgecolor="none",
-            linewidth=0,
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
+    draw_h3_column_panel(
+        ax=ax,
+        grid=grid,
+        values=month_values,
+        value_col=spec.column,
+        norm=norm,
+        cmap=spec.cmap,
+        bounds=bounds,
+        land=land,
+        coast=coast,
     )
-
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(month_panel_title(month), fontsize=11)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
 
 
 def output_path(spec: VariableSpec, year: int, agg: str) -> Path:
@@ -236,17 +203,15 @@ def plot_variable_matrix(
     grid = load_grid(uint64=True)
     land, coast = load_reference_layers()
     bounds = MapBounds.from_config()
-    norm = feature_norm(cast(pd.Series, monthly[spec.column]), spec=spec)
+    color_min, color_max = feature_limits(cast(pd.Series, monthly[spec.column]), spec)
+    if spec.center_zero:
+        norm = colors.TwoSlopeNorm(vmin=color_min, vcenter=0.0, vmax=color_max)
+    else:
+        norm = colors.Normalize(vmin=color_min, vmax=color_max)
 
-    fig, axes = plt.subplots(
-        nrows=4,
-        ncols=3,
-        figsize=(10.5, 16),
-        constrained_layout=False,
-    )
-    axes_flat = cast(list[Axes], axes.ravel().tolist())
+    fig, axes_flat = create_monthly_map_grid(f"Monthly {spec.label} - {year}")
 
-    for month, ax in enumerate(axes_flat, start=1):
+    for month, ax in month_axes(axes_flat):
         plot_month_panel(
             ax=ax,
             grid=grid,
@@ -259,17 +224,7 @@ def plot_variable_matrix(
             coast=coast,
         )
 
-    fig.suptitle(f"Monthly {spec.label} - {year}", fontsize=16, y=0.985)
-    fig.subplots_adjust(
-        left=0.025,
-        right=0.84,
-        top=0.95,
-        bottom=0.035,
-        wspace=0.15,
-        hspace=0.15,
-    )
-
-    cax = fig.add_axes((0.88, 0.20, 0.025, 0.60))
+    cax = add_monthly_colorbar_axis(fig)
     cbar = fig.colorbar(
         ScalarMappable(norm=norm, cmap=plt.get_cmap(spec.cmap)),
         cax=cax,
@@ -279,13 +234,14 @@ def plot_variable_matrix(
         spine.set_visible(False)
     cbar.set_ticks([])
     cbar.ax.tick_params(which="both", length=0, labelleft=False, labelright=False)
+    label_colorbar_extremes(
+        cbar,
+        bottom=endpoint_label(float(norm.vmin), spec),
+        top=endpoint_label(float(norm.vmax), spec),
+    )
 
     out_file = output_path(spec, year=year, agg=agg)
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    return out_file
+    return save_monthly_map(fig, out_file)
 
 
 def parse_args() -> argparse.Namespace:

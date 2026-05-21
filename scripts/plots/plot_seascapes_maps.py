@@ -1,4 +1,4 @@
-"""Plot dominant feature-only KMeans seascape assignments."""
+"""Plot dominant seascape assignments."""
 
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ matplotlib.use("Agg")
 from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
-import matplotlib.pyplot as plt
 from matplotlib import colormaps
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from riskscape.config import paths
@@ -41,15 +41,14 @@ from riskscape.visualization.base_map import (
 
 
 YEAR = 2022
-MODEL_NAME = "kmeans_k10"
+MODEL_NAME = "som_15x15_hierarchical_k30"
 INPUT_ROOT = paths["data"] / "modeling" / "seascapes"
 OUTPUT_ROOT = paths["plots"] / "seascapes"
-DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "seascapes"
 CLASS_COLUMN = "seascape"
 SCORE_COLUMN = "seascape_distance"
 SCORE_ORDER = "asc"
-FILE_PREFIX = "monthly_dominant_kmeans_seascapes"
-TITLE_LABEL = "k-means Seascapes"
+FILE_PREFIX = "monthly_dominant_som_hierarchical_seascapes"
+TITLE_LABEL = "SOM-Hierarchical Seascapes"
 
 SEASCAPE_COLORS = {
     0: "#4e79a7",
@@ -77,10 +76,7 @@ def extended_class_colors(n_classes: int) -> dict[int, str]:
     generated: list[str] = []
     for palette_name in palettes:
         cmap = colormaps[palette_name]
-        generated.extend(
-            colors.to_hex(cmap(i / cmap.N))
-            for i in range(cmap.N)
-        )
+        generated.extend(colors.to_hex(cmap(i / cmap.N)) for i in range(cmap.N))
 
     for seascape in range(len(color_lookup), n_classes):
         color_lookup[seascape] = generated[
@@ -98,7 +94,7 @@ def seascape_colors(seascapes: list[int]) -> dict[int, str]:
 
 
 def draw_seascape_colorbar(fig: Any, cax: Axes, seascapes: list[int]) -> None:
-    """Draw a discrete seascape color bar matching the component-map style."""
+    """Draw a discrete seascape color bar matching the original map style."""
     if not seascapes:
         cax.axis("off")
         return
@@ -222,16 +218,16 @@ def monthly_dominant_seascapes(
         return con.execute(query, [str(seascape_file)]).df()
 
 
-def month_panel_title(month: int) -> str:
-    """Return compact month title."""
-    return calendar.month_abbr[month]
-
-
 def display_model_name(model_name: str) -> str:
     """Return display-safe model text for figure titles."""
     if "_k" in model_name:
         return f"k = {model_name.rsplit('_k', maxsplit=1)[1]}"
     return model_name
+
+
+def month_panel_title(month: int) -> str:
+    """Return compact month title."""
+    return calendar.month_abbr[month]
 
 
 def plot_month_panel(
@@ -256,9 +252,7 @@ def plot_month_panel(
         plot_gdf = grid.merge(month_values, on="h3", how="inner")
         plot_gdf["dominant_seascape"] = plot_gdf["dominant_seascape"].astype(int)
         lookup = seascape_colors(plot_gdf["dominant_seascape"].unique().tolist())
-        plot_gdf["seascape_color"] = plot_gdf["dominant_seascape"].map(
-            lookup
-        )
+        plot_gdf["seascape_color"] = plot_gdf["dominant_seascape"].map(lookup)
 
     if not plot_gdf.empty:
         plot_gdf.plot(
@@ -340,14 +334,15 @@ def save_monthly_seascape_matrix(
     fig_width, fig_height = fig.get_size_inches()
     segment_height = cbar_width * fig_width / fig_height
     cbar_height = segment_height * max(1, len(seascapes))
-    cbar_bottom = 0.50 - cbar_height / 2
-    cbar_rect: tuple[float, float, float, float] = (
-        0.88,
-        cbar_bottom,
-        cbar_width,
-        cbar_height,
+    colorbar_bottom = 0.50 - cbar_height / 2
+    cax = fig.add_axes(
+        (
+            0.88,
+            colorbar_bottom,
+            cbar_width,
+            cbar_height,
+        )
     )
-    cax = fig.add_axes(cbar_rect)
     draw_seascape_colorbar(fig, cax, seascapes)
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -358,7 +353,7 @@ def save_monthly_seascape_matrix(
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Plot dominant feature-only KMeans seascapes.",
+        description="Plot dominant seascape assignments.",
     )
     parser.add_argument("--year", type=int, default=YEAR)
     parser.add_argument("--model-name", default=MODEL_NAME)
@@ -387,21 +382,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--file-prefix", default=FILE_PREFIX)
     parser.add_argument("--title-label", default=TITLE_LABEL)
     parser.add_argument(
-        "--skip-data-export",
-        action="store_true",
-        help="Create the figure without writing the monthly parquet export.",
-    )
-    parser.add_argument(
         "--output-root",
         type=Path,
         default=OUTPUT_ROOT,
         help="Directory for generated seascape map figures.",
-    )
-    parser.add_argument(
-        "--data-output-root",
-        type=Path,
-        default=DATA_OUTPUT_ROOT,
-        help="Directory for generated seascape summary exports.",
     )
 
     return parser.parse_args()
@@ -419,15 +403,6 @@ def main() -> int:
         score_order=args.score_order,
         drop_class=args.drop_class,
     )
-    monthly_file = (
-        args.data_output_root
-        / f"{args.file_prefix}_{args.model_name}_{args.year}.parquet"
-    )
-    if not args.skip_data_export:
-        monthly_file.parent.mkdir(parents=True, exist_ok=True)
-        monthly.to_parquet(monthly_file, index=False)
-        print("Saved:", monthly_file)
-
     figure_file = (
         args.output_root
         / f"{args.file_prefix}_{args.model_name}_{args.year}.png"

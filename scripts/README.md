@@ -19,3 +19,13 @@ mode:
 pip install -e .
 python scripts/run_pipeline.py --stage all
 ```
+
+Grouped plotting commands are available through:
+
+```bash
+python scripts/plots/plot_all_maps.py --group context
+python scripts/plots/plot_all_maps.py --group environmental predictions
+python scripts/plots/plot_all_maps.py --group weekly
+python scripts/plots/plot_all_maps.py --group gear
+python scripts/plots/plot_all_maps.py --group videos
+```

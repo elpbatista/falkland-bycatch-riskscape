@@ -60,7 +60,7 @@ Status values:
   surfaces from seascape assignments.
 - `defer` `scripts/tools/assign_components.py`: Assigns dominant Bayesian/GMM
   ecological components.
-- `defer` `scripts/build/build_weekly_operator_latent_risk.py`: Builds weekly
+- `review` `scripts/build/build_weekly_operator_latent_risk.py`: Builds weekly
   latent-risk products for operator-facing maps.
 - `defer` `scripts/tools/export_fishing_effort_by_gear_flag.py`: Exports raw GFW
   fishing effort by H3/date/gear/flag for examples.
@@ -107,8 +107,8 @@ Status values:
 
 - `keep` `scripts/plots/plot_study_area_map.py`: Plots the study area and reference
   overlay layers.
-- `review` `scripts/plots/plot_bathymetry_map.py`: Plots H3 bathymetry with land
-  overlay.
+- `defer` `scripts/plots/plot_bathymetry_map.py`: Obsolete standalone bathymetry
+  map; bathymetry is now used as a shared base layer where needed.
 - `keep` `scripts/plots/plot_environmental_histograms.py`: Plots environmental
   feature distributions for inspection.
 - `keep` `scripts/plots/plot_environmental_correlation_heatmap.py`: Plots
@@ -150,7 +150,7 @@ Status values:
   sensitivity to plausibility-gate strength.
 - `review` `scripts/plots/plot_bayesian_gmm_component_maps.py`: Plots dominant
   Bayesian/GMM environmental component assignments.
-- `review` `scripts/plots/plot_seascapes_maps.py`: Plots feature-only KMeans seascape
+- `review` `scripts/plots/plot_seascapes_maps.py`: Plots dominant seascape
   assignments.
 - `review` `scripts/plots/plot_seascape_species_use_monthly_matrix.py`: Plots monthly
   seascape-conditioned species-use maps.
@@ -159,15 +159,15 @@ Status values:
   `plot_prediction_maps.py`.
 - `defer` `scripts/plots/plot_set_longline_bbal_risk_example.py`: Plots one
   gear-aware realized-risk example for BBAL set longlines.
-- `defer` `scripts/plots/plot_weekly_gear_aware_risk_examples.py`: Plots weekly
+- `review` `scripts/plots/plot_weekly_gear_aware_risk_examples.py`: Plots weekly
   gear-aware realized-risk examples.
-- `defer` `scripts/plots/plot_weekly_latent_risk_with_jigger_activity.py`: Plots
+- `review` `scripts/plots/plot_weekly_latent_risk_with_jigger_activity.py`: Plots
   weekly latent risk with fishing-activity cells marked.
-- `defer` `scripts/plots/plot_weekly_operator_fisheries_grid_example.py`: Plots weekly
+- `review` `scripts/plots/plot_weekly_operator_fisheries_grid_example.py`: Plots weekly
   latent-risk climatology aggregated to fisheries grid squares.
-- `defer` `scripts/plots/plot_weekly_operator_latent_risk.py`: Plots weekly
+- `review` `scripts/plots/plot_weekly_operator_latent_risk.py`: Plots weekly
   latent-risk operator climatology maps.
-- `review` `scripts/plots/plot_all_maps.py`: Convenience plotting entry point; needs
-  review before documenting as public workflow.
+- `keep` `scripts/plots/plot_all_maps.py`: Runs grouped plot scripts such as
+  context, environmental, predictions, seascapes, weekly, gear, videos, and all.
 - `defer` `scripts/plots/test_prediction_maps.py`: Legacy prediction-map plotting
   test; review before keeping as a public script.

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import geopandas as gpd
 from matplotlib import colors
-from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -15,13 +14,15 @@ import pandas as pd
 from riskscape.config import paths
 from riskscape.grid import load_grid
 from riskscape.visualization.base_map import (
+    MAP_CRS,
+    MapBounds,
     draw_bathymetry_base_layer,
-    draw_compact_colorbar,
     draw_map_context,
     format_map_axes,
     load_reference_layers,
     setup_map,
 )
+from riskscape.visualization.legends import LegendMode, LegendStyle, draw_map_colorbar
 
 
 # 0.5 vessel-hours per H3 cell/day
@@ -43,6 +44,7 @@ class MapStyle:
     """Visual settings for prediction maps."""
 
     title: str | None = None
+    legend_mode: LegendMode | None = None
     colorbar_title: str | None = None
     cmap: str = "YlOrRd"
     color_palette: tuple[str, ...] | None = None
@@ -67,6 +69,35 @@ class MapStyle:
     colorbar_quantiles: tuple[float, ...] | None = None
     colorbar_bottom_label: str = "Low"
     colorbar_top_label: str = "High"
+    colorbar_invert: bool = False
+
+
+def legend_mode(style: MapStyle) -> LegendMode:
+    """Return explicit or inferred legend behavior for a map style."""
+    if style.legend_mode is not None:
+        return style.legend_mode
+
+    if style.colorbar_labels is not None:
+        return "binned_quantile"
+
+    if style.colorbar_invert:
+        return "continuous_inverted"
+
+    return "continuous"
+
+
+def legend_style(style: MapStyle, value_col: str) -> LegendStyle:
+    """Return legend settings independent of map layout."""
+    mode = legend_mode(style)
+    return LegendStyle(
+        mode=mode,
+        title=colorbar_title(style, value_col),
+        bottom_label=style.colorbar_bottom_label,
+        top_label=style.colorbar_top_label,
+        labels=style.colorbar_labels,
+        invert=style.colorbar_invert,
+        draw_edges=mode in {"binned_quantile", "categorical"},
+    )
 
 
 def prediction_path(
@@ -363,6 +394,12 @@ def color_norm(
         if vmax <= vmin:
             vmax = values.max()
 
+    if legend_mode(style) == "diverging_centered":
+        limit = max(abs(float(vmin)), abs(float(vmax)))
+        if limit <= 0:
+            limit = 1.0
+        return colors.TwoSlopeNorm(vmin=-limit, vcenter=0.0, vmax=limit)
+
     if style.color_scale == "log":
         positive = values[values > 0]
         if positive.empty:
@@ -511,6 +548,135 @@ def draw_prediction_layer(
     )
 
 
+def draw_value_gdf_panel(
+    ax,
+    value_col: str,
+    plot_gdf: gpd.GeoDataFrame,
+    norm: colors.Normalize,
+    style: MapStyle,
+    bounds: MapBounds,
+    land: gpd.GeoDataFrame,
+    coast: gpd.GeoDataFrame,
+    how: str = "left",
+    outline_col: str | None = None,
+    draw_bathymetry: bool = False,
+    show_north_arrow: bool = False,
+    show_reference_map: bool = False,
+) -> None:
+    """Draw geospatial values on an already-created map panel."""
+    if draw_bathymetry:
+        draw_bathymetry_base_layer(
+            ax,
+            legend=False,
+            draw_grid=False,
+            log_scale=style.bathymetry_log_scale,
+        )
+
+    plot_gdf = plot_gdf.dropna(subset=[value_col])
+
+    try:
+        plot_gdf = plottable_values(plot_gdf, value_col, style)
+    except ValueError:
+        plot_gdf = plot_gdf.iloc[0:0]
+
+    if not plot_gdf.empty:
+        draw_prediction_layer(ax, plot_gdf, value_col, norm, style)
+        if outline_col is not None:
+            draw_uncertain_cell_outline(ax, plot_gdf, outline_col)
+
+    bbox_gdf = gpd.GeoDataFrame(
+        geometry=[bounds.geometry()],
+        crs=plot_gdf.crs or MAP_CRS,
+    )
+    draw_map_context(
+        ax,
+        bbox_gdf,
+        land,
+        coast,
+        show_north_arrow=show_north_arrow,
+        show_reference_map=show_reference_map,
+    )
+
+
+def draw_h3_value_panel(
+    ax,
+    grid: gpd.GeoDataFrame,
+    values: pd.DataFrame,
+    value_col: str,
+    norm: colors.Normalize,
+    style: MapStyle,
+    bounds: MapBounds,
+    land: gpd.GeoDataFrame,
+    coast: gpd.GeoDataFrame,
+    how: str = "left",
+    outline_col: str | None = None,
+    draw_bathymetry: bool = False,
+    show_north_arrow: bool = False,
+    show_reference_map: bool = False,
+) -> None:
+    """Draw H3 values on an already-created map panel."""
+    draw_value_gdf_panel(
+        ax=ax,
+        plot_gdf=grid.merge(values, on="h3", how=how),
+        value_col=value_col,
+        norm=norm,
+        style=style,
+        bounds=bounds,
+        land=land,
+        coast=coast,
+        outline_col=outline_col,
+        draw_bathymetry=draw_bathymetry,
+        show_north_arrow=show_north_arrow,
+        show_reference_map=show_reference_map,
+    )
+
+
+def draw_h3_column_panel(
+    ax,
+    grid: gpd.GeoDataFrame,
+    values: pd.DataFrame,
+    value_col: str,
+    norm: colors.Normalize,
+    cmap: str,
+    bounds: MapBounds,
+    land: gpd.GeoDataFrame,
+    coast: gpd.GeoDataFrame,
+    positive_only: bool = False,
+    how: str = "left",
+    show_north_arrow: bool = False,
+    show_reference_map: bool = False,
+) -> None:
+    """Draw H3 values with GeoPandas' column/cmap/norm path."""
+    plot_gdf = grid.merge(values, on="h3", how=how)
+    plot_gdf = plot_gdf.dropna(subset=[value_col])
+    if positive_only:
+        plot_gdf = plot_gdf[plot_gdf[value_col] > 0].copy()
+
+    if not plot_gdf.empty:
+        plot_gdf.plot(
+            ax=ax,
+            column=value_col,
+            cmap=cmap,
+            norm=norm,
+            legend=False,
+            edgecolor="none",
+            linewidth=0,
+        )
+
+    bbox_gdf = gpd.GeoDataFrame(
+        geometry=[bounds.geometry()],
+        crs=grid.crs or MAP_CRS,
+    )
+    draw_map_context(
+        ax,
+        bbox_gdf,
+        land,
+        coast,
+        show_north_arrow=show_north_arrow,
+        show_reference_map=show_reference_map,
+    )
+
+
 def draw_uncertain_cell_outline(
     ax,
     gdf: gpd.GeoDataFrame,
@@ -537,18 +703,14 @@ def draw_prediction_colorbar(
     style: MapStyle,
     cax=None,
 ) -> None:
-    """Draw a compact low/high colorbar."""
-    if style.colorbar_labels is not None:
-        draw_labeled_colorbar(ax, value_col, norm, style, cax=cax)
-        return
-
-    draw_compact_colorbar(
+    """Draw the map colorbar using the style's explicit legend behavior."""
+    draw_map_colorbar(
         ax=ax,
-        cmap=style.cmap,
+        cmap=style_colormap(style),
         norm=norm,
-        label=colorbar_title(style, value_col),
-        bottom_label=style.colorbar_bottom_label,
-        top_label=style.colorbar_top_label,
+        legend=legend_style(style, value_col),
+        color_scale=style.color_scale,
+        cax=cax,
     )
 
 
@@ -561,58 +723,6 @@ def colorbar_title(style: MapStyle, value_col: str) -> str:
         return style.title
 
     return legend_label(value_col)
-
-
-def draw_labeled_colorbar(
-    ax,
-    value_col: str,
-    norm: colors.Normalize,
-    style: MapStyle,
-    cax=None,
-) -> None:
-    """Draw a discrete colorbar with category labels."""
-    if not isinstance(norm, colors.BoundaryNorm):
-        raise TypeError("Labeled colorbar requires BoundaryNorm")
-
-    boundaries = norm.boundaries
-    ticks = (boundaries[:-1] + boundaries[1:]) / 2
-
-    if style.color_scale == "log":
-        ticks = np.sqrt(boundaries[:-1] * boundaries[1:])
-
-    colorbar_kwargs = {
-        "label": colorbar_title(style, value_col),
-        "ticks": ticks,
-        "spacing": "uniform",
-        "drawedges": True,
-    }
-    if cax is None:
-        colorbar_kwargs.update(
-            {
-                "ax": ax,
-                "shrink": 0.28,
-                "aspect": len(style.colorbar_labels),
-                "pad": 0.02,
-                "fraction": 0.035,
-            }
-        )
-    else:
-        colorbar_kwargs["cax"] = cax
-
-    cbar = ax.figure.colorbar(
-        ScalarMappable(norm=norm, cmap=style_colormap(style)),
-        **colorbar_kwargs,
-    )
-    cbar.outline.set_visible(True)
-    cbar.outline.set_edgecolor("#8a8a8a")
-    cbar.outline.set_linewidth(0.8)
-    cbar.dividers.set_color("#8a8a8a")
-    cbar.dividers.set_linewidth(0.6)
-    cbar.ax.set_yticklabels(style.colorbar_labels)
-    cbar.ax.tick_params(which="both", length=0)
-    cbar.ax.minorticks_off()
-    if cbar.solids is not None:
-        cbar.solids.set_edgecolor("face")
 
 
 def prediction_labels(

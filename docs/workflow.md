@@ -157,6 +157,16 @@ Diagnostic plots also support inspection:
 - `scripts/plots/plot_species_presence_maps.py`
 - `scripts/plots/plot_relationship_diagnostics.py`
 
+Weekly and operator-facing products are also part of the plotting surface and
+need validation before release:
+
+- `scripts/build/build_weekly_operator_latent_risk.py`
+- `scripts/plots/plot_weekly_operator_latent_risk.py`
+- `scripts/plots/plot_weekly_operator_fisheries_grid_example.py`
+- `scripts/plots/plot_weekly_latent_risk_with_jigger_activity.py`
+- `scripts/plots/plot_weekly_gear_aware_risk_examples.py`
+- `scripts/plots/plot_weekly_operator_latent_risk.py --make-animation`
+
 ## 9. Assemble Model-Ready Datasets
 
 Combine feature tables into model-ready datasets.
@@ -189,6 +199,54 @@ Granular scripts:
 
 Generated plots are written under `plots/` and ignored by Git. Selected figures
 or reproducibility bundles should be archived externally on Zenodo.
+
+Run plot groups with:
+
+```bash
+python scripts/plots/plot_all_maps.py --group context
+python scripts/plots/plot_all_maps.py --group environmental
+python scripts/plots/plot_all_maps.py --group predictions
+python scripts/plots/plot_all_maps.py --group weekly
+python scripts/plots/plot_all_maps.py --group gear
+python scripts/plots/plot_all_maps.py --group videos
+```
+
+Use `--group all` to run all grouped plot scripts, or `--list` to inspect which
+scripts a group will run.
+
+Reference and static context plots:
+
+- `scripts/plots/plot_study_area_map.py`
+
+Prediction, plausibility, and latent-risk plots:
+
+- `scripts/plots/plot_prediction_maps.py`
+- `scripts/plots/plot_prediction_latent_risk_monthly_matrix.py`
+- `scripts/plots/plot_plausibility_maps.py`
+- `scripts/plots/plot_plausibility_monthly_climatology.py`
+- `scripts/plots/plot_plausibility_yearly_timeseries.py`
+- `scripts/plots/plot_plausibility_gate_sensitivity.py`
+
+Model diagnostics:
+
+- `scripts/plots/plot_species_feature_importance.py`
+- `scripts/plots/plot_species_partial_dependence.py`
+- `scripts/plots/plot_species_use_observed_vs_predicted.py`
+
+Seascape and component plots:
+
+- `scripts/plots/plot_bayesian_gmm_component_maps.py`
+- `scripts/plots/plot_bayesian_gmm_component_maps.py --monthly`
+- `scripts/plots/plot_seascapes_maps.py`
+- `scripts/plots/plot_seascape_species_use_monthly_matrix.py`
+- `scripts/plots/plot_seascape_prediction_maps.py`
+- `scripts/plots/plot_seascape_prediction_maps.py --monthly-matrix --matrix-values species_use_log_pred risk_log_pred`
+
+Gear-aware plots:
+
+- `scripts/plots/plot_set_longline_bbal_risk_example.py`
+- `scripts/plots/plot_all_maps.py`
+- `scripts/plots/test_prediction_maps.py`
 
 ## Publishing Note
 

@@ -8,7 +8,6 @@ from pathlib import Path
 
 import geopandas as gpd
 from matplotlib import colors
-from matplotlib.cm import ScalarMappable
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +16,10 @@ from shapely.geometry import box
 
 from riskscape.config import cfg, paths
 from riskscape.grid import load_grid
+from riskscape.visualization.legends import (
+    LegendStyle,
+    draw_continuous_colorbar,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -120,36 +123,6 @@ def setup_map(figsize: tuple[int, int] = (10, 10)):
     return fig, ax, bbox_gdf
 
 
-def label_colorbar_extremes(
-    fig,
-    bottom: str = "Low",
-    top: str = "High",
-) -> None:
-    """Label a colorbar with simple endpoint text."""
-    if len(fig.axes) < 2:
-        return
-
-    cax = fig.axes[-1]
-    cax.text(
-        0.5,
-        -0.03,
-        bottom,
-        transform=cax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=9,
-    )
-    cax.text(
-        0.5,
-        1.03,
-        top,
-        transform=cax.transAxes,
-        ha="center",
-        va="bottom",
-        fontsize=9,
-    )
-
-
 def draw_compact_colorbar(
     ax,
     cmap: str,
@@ -160,23 +133,21 @@ def draw_compact_colorbar(
     invert: bool = False,
 ) -> None:
     """Draw a compact colorbar matching feature-map legends."""
-    fig = ax.figure
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=plt.get_cmap(cmap)),
+    draw_continuous_colorbar(
         ax=ax,
-        label=label,
-        **COLORBAR_KWARGS,
+        cmap=cmap,
+        norm=norm,
+        legend=LegendStyle(
+            mode="continuous_inverted" if invert else "continuous",
+            title=label,
+            bottom_label=bottom_label,
+            top_label=top_label,
+            invert=invert,
+            shrink=COLORBAR_KWARGS["shrink"],
+            pad=COLORBAR_KWARGS["pad"],
+            fraction=COLORBAR_KWARGS["fraction"],
+        ),
     )
-    cbar.outline.set_visible(False)
-    cbar.ax.tick_params(which="both", length=0)
-    cbar.ax.minorticks_off()
-    if cbar.solids is not None:
-        cbar.solids.set_edgecolor("face")
-
-    if invert:
-        cbar.ax.invert_yaxis()
-
-    label_colorbar_extremes(fig, bottom=bottom_label, top=top_label)
 
 
 def format_depth_label(value: float) -> str:
@@ -229,14 +200,16 @@ def draw_bathymetry_legend(
     max_depth: float,
 ) -> None:
     """Draw the inverted bathymetry legend."""
-    draw_compact_colorbar(
+    draw_continuous_colorbar(
         ax,
         cmap,
         norm,
-        label="Depth",
-        bottom_label=format_depth_label(max_depth),
-        top_label=format_depth_label(min_depth),
-        invert=True,
+        legend=LegendStyle(
+            mode="continuous_inverted",
+            title="Depth",
+            bottom_label=format_depth_label(max_depth),
+            top_label=format_depth_label(min_depth),
+        ),
     )
 
 

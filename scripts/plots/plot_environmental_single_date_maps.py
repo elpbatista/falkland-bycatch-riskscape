@@ -21,6 +21,7 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
+from riskscape.utils.dates import read_parquet_utc_day
 from riskscape.visualization.maps import MapStyle, plot_h3_map
 
 
@@ -50,7 +51,7 @@ VARIABLE_SPECS = [
     VariableSpec("ssh", "SSH", "SSH (m)", "viridis"),
     VariableSpec("wind_speed", "Wind Speed", "Wind speed (m/s)", "magma"),
     VariableSpec("chl_log", "CHL", "CHL (mg m^-3)", "YlGn"),
-    VariableSpec("sst_anom", "SST Anomaly", "SST anomaly (K)", "RdBu_r", True),
+    VariableSpec("sst_anom", "SST Anomaly", "SST anomaly (°C)", "RdBu_r", True),
     VariableSpec("ssh_anom", "SSH Anomaly", "SSH anomaly (m)", "RdBu_r", True),
     VariableSpec(
         "wind_speed_anom",
@@ -112,13 +113,8 @@ def load_environmental_date(
     if not path.exists():
         raise FileNotFoundError(f"Environmental feature file not found: {path}")
 
-    target = pd.Timestamp(date, tz="UTC")
     columns = ["h3", "date", *[spec.column for spec in specs]]
-    out = pd.read_parquet(
-        path,
-        columns=columns,
-        filters=[("date", "=", target)],
-    )
+    out = read_parquet_utc_day(path, columns=columns, date=date)
 
     if out.empty:
         raise ValueError(f"No environmental rows found for date: {date}")
@@ -206,6 +202,9 @@ def plot_single_date_maps(
                 title=f"{spec.label} — {date}",
                 out_file=out_file,
                 style=MapStyle(
+                    legend_mode=(
+                        "diverging_centered" if spec.center_zero else "continuous"
+                    ),
                     cmap=spec.cmap,
                     colorbar_title=spec.colorbar,
                     color_min=color_min,

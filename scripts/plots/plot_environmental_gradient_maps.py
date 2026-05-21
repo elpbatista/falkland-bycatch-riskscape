@@ -18,6 +18,7 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
+from riskscape.utils.dates import normalize_date_column, read_parquet_utc_day
 from riskscape.visualization.maps import MapStyle, plot_h3_map
 
 
@@ -68,17 +69,12 @@ def load_environmental_gradients(
         raise ValueError("Use either --date or --month, not both")
 
     if date is not None:
-        target = pd.Timestamp(date, tz="UTC")
-        out = pd.read_parquet(
-            path,
-            columns=columns,
-            filters=[("date", "=", target)],
-        )
+        out = read_parquet_utc_day(path, columns=columns, date=date)
         if out.empty:
             raise ValueError(f"No environmental rows found for date: {date}")
         return out
 
-    out = pd.read_parquet(path, columns=columns)
+    out = normalize_date_column(pd.read_parquet(path, columns=columns))
 
     if month is not None:
         if month < 1 or month > 12:
@@ -159,6 +155,7 @@ def plot_gradient_maps(
                 title=title,
                 out_file=out_file,
                 style=MapStyle(
+                    legend_mode="continuous",
                     cmap=meta["cmap"],
                     colorbar_title=meta["colorbar"],
                     color_quantile=0.99,

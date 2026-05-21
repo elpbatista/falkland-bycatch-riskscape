@@ -249,20 +249,6 @@ def output_file(
     )
 
 
-def write_fisheries_aggregate(aggregated: pd.DataFrame, year: int) -> Path:
-    """Write the fisheries-grid aggregate behind the example map."""
-    out_file = (
-        SUMMARY_ROOT
-        / (
-            "gear_aware_weekly_realized_risk_fisheries_grid_"
-            f"{year}.parquet"
-        )
-    )
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    aggregated.to_parquet(out_file, index=False)
-    return out_file
-
-
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -306,8 +292,6 @@ def main() -> int:
     fisheries_grid, limits = load_reference_overlays()
     h3_to_fisheries = build_h3_to_fisheries_lookup(h3_grid, fisheries_grid)
     aggregated = aggregate_to_fisheries_grid(weekly_risk, h3_to_fisheries)
-    aggregate_path = write_fisheries_aggregate(aggregated, args.year)
-    print("Saved fisheries-grid aggregate:", aggregate_path)
 
     species_gear_values = [
         f"{species} - {gear_type}" for species, gear_type in PAIRS

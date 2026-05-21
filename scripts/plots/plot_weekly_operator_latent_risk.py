@@ -13,8 +13,6 @@ if str(_SRC) not in sys.path:
 
 import argparse
 from pathlib import Path
-import shutil
-import subprocess
 import sys
 from typing import cast
 
@@ -25,26 +23,26 @@ matplotlib.use("Agg")
 
 from matplotlib import colors
 from matplotlib.axes import Axes
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
-from riskscape.visualization.base_map import (
-    MAP_CRS,
-    MapBounds,
-    OCEAN_COLOR,
-    draw_bathymetry_base_layer,
-    draw_reference_layers,
-    load_reference_layers,
-)
+from riskscape.visualization.base_map import MapBounds, load_reference_layers
 from riskscape.visualization.maps import (
     MapStyle,
     color_norm,
+    draw_h3_value_panel,
     draw_prediction_colorbar,
-    draw_prediction_layer,
-    plottable_values,
+)
+from riskscape.visualization.weekly_maps import (
+    add_weekly_colorbar_axis,
+    create_weekly_frame,
+    create_weekly_map_grid,
+    encode_mp4,
+    format_week_panel,
+    format_weekly_frame,
+    save_weekly_map,
+    weekly_axes,
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -68,7 +66,6 @@ SEQUENCE_YEAR = 2022
 SPECIES = ("BBAL", "SAFS")
 REPRESENTATIVE_WEEKS = (3, 24, 36, 50)
 OUTPUT_ROOT = paths["plots"] / "predictions" / "weekly_operator"
-SMALL_MULTIPLES_COLORBAR_POSITION = (0.935, 0.43, 0.018, 0.14)
 
 
 def climatology_path(
@@ -158,11 +155,6 @@ def risk_norm(style: MapStyle) -> colors.BoundaryNorm:
     return norm
 
 
-def panel_title(species: str, week: int) -> str:
-    """Return panel title."""
-    return f"{species} — ISO week {week:02d}"
-
-
 def plot_week_panel(
     ax: Axes,
     grid: gpd.GeoDataFrame,
@@ -176,9 +168,7 @@ def plot_week_panel(
     coast: gpd.GeoDataFrame,
 ) -> None:
     """Draw one weekly climatology panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
-    draw_bathymetry_base_layer(ax, legend=False, draw_grid=False)
+    format_week_panel(ax, species=species, week=week, bounds=bounds)
 
     mask = (
         cast(pd.Series, climatology["species"]).eq(species)
@@ -188,38 +178,18 @@ def plot_week_panel(
         mask,
         ["h3", "display_latent_risk_log_pred_mean"],
     ]
-    plot_gdf = grid.merge(values, on="h3", how="left")
-    plot_gdf = plot_gdf.dropna(subset=["display_latent_risk_log_pred_mean"])
-
-    if not plot_gdf.empty:
-        try:
-            plot_gdf = plottable_values(
-                plot_gdf,
-                value_col="display_latent_risk_log_pred_mean",
-                style=style,
-            )
-        except ValueError:
-            plot_gdf = plot_gdf.iloc[0:0]
-
-    if not plot_gdf.empty:
-        draw_prediction_layer(
-            ax=ax,
-            gdf=plot_gdf,
-            value_col="display_latent_risk_log_pred_mean",
-            norm=norm,
-            style=style,
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
+    draw_h3_value_panel(
+        ax=ax,
+        grid=grid,
+        values=values,
+        value_col="display_latent_risk_log_pred_mean",
+        norm=norm,
+        style=style,
+        bounds=bounds,
+        land=land,
+        coast=coast,
+        draw_bathymetry=True,
     )
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(panel_title(species, week), fontsize=10)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
 
 
 def add_risk_colorbar(
@@ -300,44 +270,27 @@ def plot_small_multiples(
     style = risk_style(model_name, product_name, species_values)
     norm = risk_norm(style)
 
-    fig, axes = plt.subplots(
-        nrows=len(species_values),
-        ncols=len(weeks),
-        figsize=(4.0 * len(weeks), 5.1 * len(species_values)),
-        constrained_layout=False,
-    )
-    axes_array = np.atleast_2d(axes)
-
-    for row, species in enumerate(species_values):
-        for col, week in enumerate(weeks):
-            plot_week_panel(
-                ax=cast(Axes, axes_array[row, col]),
-                grid=grid,
-                climatology=climatology,
-                species=species,
-                week=week,
-                norm=norm,
-                style=style,
-                bounds=bounds,
-                land=land,
-                coast=coast,
-            )
-
-    fig.suptitle(
-        f"Weekly Latent-Risk Climatology — {start_year}-{end_year}",
-        fontsize=16,
-        y=0.985,
-    )
-    fig.subplots_adjust(
-        left=0.02,
-        right=0.91,
-        top=0.93,
-        bottom=0.035,
-        wspace=0.09,
-        hspace=0.16,
+    fig, axes_array = create_weekly_map_grid(
+        species_values=species_values,
+        weeks=weeks,
+        title=f"Weekly Latent-Risk Climatology — {start_year}-{end_year}",
     )
 
-    cax = fig.add_axes(SMALL_MULTIPLES_COLORBAR_POSITION)
+    for ax, species, week in weekly_axes(axes_array, species_values, weeks):
+        plot_week_panel(
+            ax=ax,
+            grid=grid,
+            climatology=climatology,
+            species=species,
+            week=week,
+            norm=norm,
+            style=style,
+            bounds=bounds,
+            land=land,
+            coast=coast,
+        )
+
+    cax = add_weekly_colorbar_axis(fig)
     add_risk_colorbar(
         ax=cast(Axes, axes_array[0, -1]),
         norm=norm,
@@ -351,10 +304,7 @@ def plot_small_multiples(
         start_year=start_year,
         end_year=end_year,
     )
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    return out_file
+    return save_weekly_map(fig, out_file)
 
 
 def render_animation_frames(
@@ -379,7 +329,7 @@ def render_animation_frames(
     frames: list[Path] = []
 
     for index, week in enumerate(weeks, start=1):
-        fig, ax = plt.subplots(figsize=(7.2, 8.4), constrained_layout=False)
+        fig, ax = create_weekly_frame()
         plot_week_panel(
             ax=ax,
             grid=grid,
@@ -393,7 +343,7 @@ def render_animation_frames(
             coast=coast,
         )
         ax.set_title(f"{species} — {sequence_year} ISO week {week:02d}", fontsize=13)
-        fig.subplots_adjust(left=0.02, right=0.88, top=0.94, bottom=0.02)
+        format_weekly_frame(fig)
         add_risk_colorbar(
             ax=ax,
             norm=norm,
@@ -401,44 +351,10 @@ def render_animation_frames(
         )
 
         frame_path = out_dir / f"week_{index:03d}_iso_week_{week:02d}.png"
-        fig.savefig(frame_path, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
+        save_weekly_map(fig, frame_path, dpi=dpi)
         frames.append(frame_path)
 
     return frames
-
-
-def encode_mp4(frame_dir: Path, out_file: Path, fps: int) -> None:
-    """Encode numbered PNG frames into MP4 with ffmpeg."""
-    ffmpeg = shutil.which("ffmpeg")
-    if ffmpeg is None:
-        for candidate in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
-            if Path(candidate).exists():
-                ffmpeg = candidate
-                break
-
-    if ffmpeg is None:
-        raise RuntimeError("ffmpeg is required to encode MP4 animations")
-
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        ffmpeg,
-        "-y",
-        "-framerate",
-        str(fps),
-        "-pattern_type",
-        "glob",
-        "-i",
-        str(frame_dir / "week_*.png"),
-        "-vf",
-        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        str(out_file),
-    ]
-    subprocess.run(cmd, check=True)
 
 
 def plot_animations(

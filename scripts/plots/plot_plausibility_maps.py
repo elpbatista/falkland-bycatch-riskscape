@@ -27,6 +27,7 @@ PLAUSIBILITY_MAP_NAME = "Non-zero mean plausibility"
 
 PLAUSIBILITY_STYLE = MapStyle(
     title=None,
+    legend_mode="continuous",
     colorbar_title=PLAUSIBILITY_MAP_NAME,
     cmap="viridis",
     color_min=0.0,

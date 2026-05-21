@@ -23,25 +23,19 @@ matplotlib.use("Agg")
 
 from matplotlib import colors
 from matplotlib.axes import Axes
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from riskscape.config import PROJECT_ROOT, cfg, paths
 from riskscape.grid import load_grid
 from riskscape.visualization.base_map import (
     MAP_CRS,
-    OCEAN_COLOR,
     MapBounds,
-    draw_bathymetry_base_layer,
-    draw_map_context,
     load_reference_layers,
 )
 from riskscape.visualization.maps import (
     MapStyle,
     draw_prediction_colorbar,
-    draw_prediction_layer,
-    plottable_values,
+    draw_value_gdf_panel,
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -53,7 +47,6 @@ from plot_weekly_operator_latent_risk import (  # noqa: E402
     MODEL_NAME,
     PRODUCT_NAME,
     REPRESENTATIVE_WEEKS,
-    SMALL_MULTIPLES_COLORBAR_POSITION,
     SPECIES,
     START_YEAR,
     climatology_path,
@@ -61,10 +54,16 @@ from plot_weekly_operator_latent_risk import (  # noqa: E402
     risk_norm,
     risk_style,
 )
+from riskscape.visualization.weekly_maps import (
+    add_weekly_colorbar_axis,
+    create_weekly_map_grid,
+    format_week_panel,
+    save_weekly_map,
+    weekly_axes,
+)
 
 
 OUTPUT_ROOT = paths["plots"] / "predictions" / "weekly_operator"
-AGGREGATE_ROOT = paths["data"] / "plot_exports" / "weekly_operator"
 GRID_LINE_COLOR = "#5f5f5f"
 PROTECTION_ZONE_COLOR = "#404040"
 VALUE_COL = "display_latent_risk_log_pred_mean"
@@ -75,24 +74,6 @@ def load_reference_overlays() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     fisheries = gpd.read_file(PROJECT_ROOT / cfg["references"]["fisheries"])
     limits = gpd.read_file(PROJECT_ROOT / cfg["references"]["limits"])
     return fisheries.to_crs(MAP_CRS), limits.to_crs(MAP_CRS)
-
-
-def fisheries_aggregate_path(
-    model_name: str,
-    product_name: str,
-    start_year: int,
-    end_year: int,
-) -> Path:
-    """Return the fisheries-grid aggregate export path."""
-    return (
-        AGGREGATE_ROOT
-        / model_name
-        / product_name
-        / (
-            f"latent_risk_iso_week_climatology_{start_year}-{end_year}_"
-            "fisheries_grid.parquet"
-        )
-    )
 
 
 def output_path(
@@ -163,9 +144,13 @@ def plot_panel(
     value_col: str = VALUE_COL,
 ) -> None:
     """Draw one fisheries-grid weekly climatology panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
-    draw_bathymetry_base_layer(ax, legend=False, draw_grid=False)
+    format_week_panel(
+        ax,
+        species=species,
+        week=week,
+        bounds=bounds,
+        title=f"{species} - ISO week {week:02d}",
+    )
 
     values = aggregated[
         (aggregated["species"] == species) & (aggregated["iso_week"] == week)
@@ -176,22 +161,17 @@ def plot_panel(
         right_on="fisheries_grid",
         how="left",
     )
-    plot_gdf = plot_gdf.dropna(subset=[value_col])
-
-    if not plot_gdf.empty:
-        try:
-            plot_gdf = plottable_values(plot_gdf, value_col, style)
-        except ValueError:
-            plot_gdf = plot_gdf.iloc[0:0]
-
-    if not plot_gdf.empty:
-        draw_prediction_layer(
-            ax=ax,
-            gdf=plot_gdf,
-            value_col=value_col,
-            norm=norm,
-            style=style,
-        )
+    draw_value_gdf_panel(
+        ax=ax,
+        plot_gdf=plot_gdf,
+        value_col=value_col,
+        norm=norm,
+        style=style,
+        bounds=bounds,
+        land=land,
+        coast=coast,
+        draw_bathymetry=True,
+    )
 
     fisheries_grid.boundary.plot(
         ax=ax,
@@ -207,21 +187,6 @@ def plot_panel(
         alpha=0.95,
         zorder=6,
     )
-
-    bbox_gdf = gpd.GeoDataFrame(geometry=[bounds.geometry()], crs=MAP_CRS)
-    draw_map_context(
-        ax,
-        bbox_gdf,
-        land,
-        coast,
-        show_north_arrow=False,
-        show_reference_map=False,
-    )
-    ax.set_title(f"{species} - ISO week {week:02d}", fontsize=10)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
 
 
 def plot_small_multiples(
@@ -245,47 +210,30 @@ def plot_small_multiples(
     style = risk_style(model_name, product_name, style_species_values or species_values)
     norm = risk_norm(style)
 
-    fig, axes = plt.subplots(
-        nrows=len(species_values),
-        ncols=len(weeks),
-        figsize=(4.0 * len(weeks), 5.1 * len(species_values)),
-        constrained_layout=False,
-    )
-    axes_array = np.atleast_2d(axes)
-
-    for row, species in enumerate(species_values):
-        for col, week in enumerate(weeks):
-            plot_panel(
-                ax=cast(Axes, axes_array[row, col]),
-                fisheries_grid=fisheries_grid,
-                limits=limits,
-                aggregated=aggregated,
-                species=species,
-                week=week,
-                norm=norm,
-                style=style,
-                bounds=bounds,
-                land=land,
-                coast=coast,
-                value_col=value_col,
-            )
-
-    fig.suptitle(
-        title
+    fig, axes_array = create_weekly_map_grid(
+        species_values=species_values,
+        weeks=weeks,
+        title=title
         or f"Weekly Latent-Risk Climatology on Fisheries Grid - {start_year}-{end_year}",
-        fontsize=16,
-        y=0.985,
-    )
-    fig.subplots_adjust(
-        left=0.02,
-        right=0.91,
-        top=0.93,
-        bottom=0.035,
-        wspace=0.09,
-        hspace=0.16,
     )
 
-    cax = fig.add_axes(SMALL_MULTIPLES_COLORBAR_POSITION)
+    for ax, species, week in weekly_axes(axes_array, species_values, weeks):
+        plot_panel(
+            ax=ax,
+            fisheries_grid=fisheries_grid,
+            limits=limits,
+            aggregated=aggregated,
+            species=species,
+            week=week,
+            norm=norm,
+            style=style,
+            bounds=bounds,
+            land=land,
+            coast=coast,
+            value_col=value_col,
+        )
+
+    cax = add_weekly_colorbar_axis(fig)
     draw_prediction_colorbar(
         ax=cast(Axes, axes_array[0, -1]),
         value_col=value_col,
@@ -301,10 +249,7 @@ def plot_small_multiples(
             start_year=start_year,
             end_year=end_year,
         )
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    return out_file
+    return save_weekly_map(fig, out_file)
 
 
 def parse_args() -> argparse.Namespace:
@@ -341,16 +286,6 @@ def main() -> int:
     fisheries_grid, limits = load_reference_overlays()
     h3_to_fisheries = build_h3_to_fisheries_lookup(h3_grid, fisheries_grid)
     aggregated = aggregate_to_fisheries_grid(climatology, h3_to_fisheries)
-
-    aggregate_path = fisheries_aggregate_path(
-        model_name=args.model_name,
-        product_name=args.product_name,
-        start_year=args.start_year,
-        end_year=args.end_year,
-    )
-    aggregate_path.parent.mkdir(parents=True, exist_ok=True)
-    aggregated.to_parquet(aggregate_path, index=False)
-    print(f"Saved aggregate: {aggregate_path}")
 
     out_file = plot_small_multiples(
         aggregated=aggregated,

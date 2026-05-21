@@ -1,6 +1,10 @@
 {
-  "extraPaths": [
+  "include": [
     "src",
     "scripts"
+  ],
+  "extraPaths": [
+    "src",
+    "scripts/plots"
   ]
 }

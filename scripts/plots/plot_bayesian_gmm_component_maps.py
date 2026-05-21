@@ -12,31 +12,17 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import argparse
-import calendar
 from pathlib import Path
 import duckdb
-import geopandas as gpd
 import matplotlib
 
 matplotlib.use("Agg")
 
-from matplotlib.axes import Axes
-from matplotlib import colors
-from matplotlib.cm import ScalarMappable
-import matplotlib.pyplot as plt
-from matplotlib import colormaps
 import pandas as pd
-from typing import Any, cast
 
 from riskscape.config import paths
-from riskscape.grid import load_grid
-from riskscape.visualization.base_map import (
-    MAP_CRS,
-    MapBounds,
-    OCEAN_COLOR,
-    draw_reference_layers,
-    load_reference_layers,
-)
+from riskscape.visualization.component_maps import save_monthly_categorical_matrix
+from riskscape.visualization.component_maps import save_single_categorical_map
 
 
 YEAR = 2022
@@ -48,7 +34,6 @@ INPUT_ROOT = (
     / "environmental_regimes"
 )
 OUTPUT_ROOT = paths["plots"] / "plausibility"
-DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "plausibility"
 
 COMPONENT_COLORS = {
     0: "#4e79a7",
@@ -63,70 +48,9 @@ COMPONENT_COLORS = {
     9: "#bab0ac",
 }
 
-
-def extended_class_colors(n_classes: int) -> dict[int, str]:
-    """Return a stable discrete color lookup for component classes."""
-    color_lookup = dict(COMPONENT_COLORS)
-    palettes = ["tab20", "tab20b", "tab20c"]
-    colors_needed = max(0, n_classes - len(color_lookup))
-
-    if colors_needed == 0:
-        return color_lookup
-
-    generated: list[str] = []
-    for palette_name in palettes:
-        cmap = colormaps[palette_name]
-        generated.extend(
-            colors.to_hex(cmap(i / cmap.N))
-            for i in range(cmap.N)
-        )
-
-    for component in range(len(color_lookup), n_classes):
-        color_lookup[component] = generated[
-            (component - len(COMPONENT_COLORS)) % len(generated)
-        ]
-
-    return color_lookup
-
-
-def component_colors(components: list[int]) -> dict[int, str]:
-    """Return colors for the observed components."""
-    if not components:
-        return {}
-    return extended_class_colors(max(components) + 1)
-
-
 def model_label(model_name: str) -> str:
     """Return a compact display label for the component model."""
     return model_name.replace("_", " ").upper().replace("BAYESIAN GMM", "Bayesian/GMM")
-
-
-def draw_component_colorbar(fig: Any, cax: Axes, components: list[int]) -> None:
-    """Draw a discrete component color bar matching the risk-map style."""
-    if not components:
-        cax.axis("off")
-        return
-
-    lookup = component_colors(components)
-    cmap = colors.ListedColormap([lookup[component] for component in components])
-    boundaries = list(range(len(components) + 1))
-    ticks = [idx + 0.5 for idx in range(len(components))]
-    norm = colors.BoundaryNorm(boundaries, cmap.N)
-
-    cbar = fig.colorbar(
-        ScalarMappable(norm=norm, cmap=cmap),
-        cax=cax,
-        label="Component",
-        ticks=ticks,
-        spacing="uniform",
-        drawedges=True,
-    )
-    cbar.ax.set_yticklabels([str(component) for component in components])
-    cbar.ax.tick_params(which="both", length=0, labelsize=8)
-    cbar.ax.minorticks_off()
-    if cbar.solids is not None:
-        cast(Any, cbar.solids).set_edgecolor("face")
-
 
 def component_path(year: int, input_root: Path) -> Path:
     """Return component-assignment partition path for a year."""
@@ -259,55 +183,6 @@ def monthly_dominant_components(
         ).df()
 
 
-def month_panel_title(month: int) -> str:
-    """Return compact month title."""
-    return calendar.month_abbr[month]
-
-
-def plot_component_panel(
-    ax: Axes,
-    grid: gpd.GeoDataFrame,
-    summary: pd.DataFrame,
-    bounds: MapBounds,
-    land: gpd.GeoDataFrame,
-    coast: gpd.GeoDataFrame,
-) -> list[int]:
-    """Draw one dominant-component map panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
-
-    if summary.empty:
-        raise ValueError("No component rows found")
-
-    plot_gdf = grid.merge(summary, on="h3", how="left")
-    plot_gdf = plot_gdf.dropna(subset=["dominant_component"]).copy()
-    plot_gdf["dominant_component"] = plot_gdf["dominant_component"].astype(int)
-    lookup = component_colors(plot_gdf["dominant_component"].unique().tolist())
-    plot_gdf["component_color"] = plot_gdf["dominant_component"].map(
-        lookup
-    )
-
-    if not plot_gdf.empty:
-        plot_gdf.plot(
-            ax=ax,
-            color=plot_gdf["component_color"],
-            edgecolor="none",
-            linewidth=0,
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
-    )
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-
-    return sorted(plot_gdf["dominant_component"].unique().tolist())
-
-
 def save_component_map(
     summary: pd.DataFrame,
     year: int,
@@ -315,100 +190,14 @@ def save_component_map(
     out_file: Path,
 ) -> None:
     """Save one dominant-component map."""
-    grid = load_grid(uint64=True)
-    land, coast = load_reference_layers()
-    bounds = MapBounds.from_config()
-
-    fig, ax = plt.subplots(figsize=(8.2, 7.2), constrained_layout=False)
-    used_components = plot_component_panel(
-        ax=ax,
-        grid=grid,
-        summary=summary,
-        bounds=bounds,
-        land=land,
-        coast=coast,
+    save_single_categorical_map(
+        values=summary,
+        value_col="dominant_component",
+        colorbar_label="Component",
+        title=f"Dominant {model_label(model_name)} Environmental Components — {year}",
+        out_file=out_file,
+        base_colors=COMPONENT_COLORS,
     )
-
-    fig.suptitle(
-        f"Dominant {model_label(model_name)} Environmental Components — {year}",
-        fontsize=14,
-        y=0.98,
-    )
-    fig.subplots_adjust(
-        left=0.03,
-        right=0.86,
-        top=0.92,
-        bottom=0.04,
-    )
-    components = sorted(used_components)
-    cbar_width = 0.030
-    fig_width, fig_height = fig.get_size_inches()
-    segment_height = cbar_width * fig_width / fig_height
-    cbar_height = segment_height * max(1, len(components))
-    cbar_bottom = 0.50 - cbar_height / 2
-    cbar_rect: tuple[float, float, float, float] = (
-        0.89,
-        cbar_bottom,
-        cbar_width,
-        cbar_height,
-    )
-    cax = fig.add_axes(cbar_rect)
-    draw_component_colorbar(fig, cax, components)
-
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_month_panel(
-    ax: Axes,
-    grid: gpd.GeoDataFrame,
-    monthly: pd.DataFrame,
-    month: int,
-    bounds: MapBounds,
-    land: gpd.GeoDataFrame,
-    coast: gpd.GeoDataFrame,
-) -> list[int]:
-    """Draw one monthly dominant-component panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
-
-    month_mask = cast(pd.Series, monthly["month"]).eq(month)
-    month_values = monthly.loc[month_mask].copy()
-
-    if month_values.empty:
-        plot_gdf = grid.iloc[0:0].copy()
-    else:
-        plot_gdf = grid.merge(month_values, on="h3", how="inner")
-        plot_gdf["dominant_component"] = plot_gdf["dominant_component"].astype(int)
-        lookup = component_colors(plot_gdf["dominant_component"].unique().tolist())
-        plot_gdf["component_color"] = plot_gdf["dominant_component"].map(
-            lookup
-        )
-
-    if not plot_gdf.empty:
-        plot_gdf.plot(
-            ax=ax,
-            color=plot_gdf["component_color"],
-            edgecolor="none",
-            linewidth=0,
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
-    )
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(month_panel_title(month), fontsize=11)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-
-    if plot_gdf.empty:
-        return []
-
-    return sorted(plot_gdf["dominant_component"].unique().tolist())
 
 
 def save_monthly_component_matrix(
@@ -418,66 +207,14 @@ def save_monthly_component_matrix(
     out_file: Path,
 ) -> None:
     """Save a 12-panel monthly dominant-component matrix."""
-    if monthly.empty:
-        raise ValueError("No monthly component rows found")
-
-    grid = load_grid(uint64=True)
-    land, coast = load_reference_layers()
-    bounds = MapBounds.from_config()
-
-    fig, axes = plt.subplots(
-        nrows=4,
-        ncols=3,
-        figsize=(10.5, 16),
-        constrained_layout=False,
+    save_monthly_categorical_matrix(
+        monthly=monthly,
+        value_col="dominant_component",
+        colorbar_label="Component",
+        title=f"Monthly Dominant {model_label(model_name)} Environmental Components — {year}",
+        out_file=out_file,
+        base_colors=COMPONENT_COLORS,
     )
-    axes_flat = cast(list[Axes], axes.ravel().tolist())
-    used_components: set[int] = set()
-
-    for month, ax in enumerate(axes_flat, start=1):
-        used_components.update(
-            plot_month_panel(
-                ax=ax,
-                grid=grid,
-                monthly=monthly,
-                month=month,
-                bounds=bounds,
-                land=land,
-                coast=coast,
-            )
-        )
-
-    fig.suptitle(
-        f"Monthly Dominant {model_label(model_name)} Environmental Components — {year}",
-        fontsize=16,
-        y=0.985,
-    )
-    fig.subplots_adjust(
-        left=0.025,
-        right=0.84,
-        top=0.95,
-        bottom=0.035,
-        wspace=0.15,
-        hspace=0.15,
-    )
-    components = sorted(used_components)
-    cbar_width = 0.025
-    fig_width, fig_height = fig.get_size_inches()
-    segment_height = cbar_width * fig_width / fig_height
-    cbar_height = segment_height * max(1, len(components))
-    cbar_bottom = 0.50 - cbar_height / 2
-    cbar_rect: tuple[float, float, float, float] = (
-        0.88,
-        cbar_bottom,
-        cbar_width,
-        cbar_height,
-    )
-    cax = fig.add_axes(cbar_rect)
-    draw_component_colorbar(fig, cax, components)
-
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
 
 
 def parse_args() -> argparse.Namespace:
@@ -501,12 +238,6 @@ def parse_args() -> argparse.Namespace:
         help="Directory for generated component map figures.",
     )
     parser.add_argument(
-        "--data-output-root",
-        type=Path,
-        default=DATA_OUTPUT_ROOT,
-        help="Directory for generated component summary exports.",
-    )
-    parser.add_argument(
         "--monthly",
         action="store_true",
         help="Also generate 12-panel monthly component matrices.",
@@ -525,16 +256,6 @@ def main() -> int:
         product_name=args.product,
         input_root=args.input_root,
     )
-    summary_file = (
-        args.data_output_root
-        / f"dominant_{args.model}_components_{args.year}.parquet"
-    )
-
-    summary_file.parent.mkdir(parents=True, exist_ok=True)
-    summary.to_parquet(summary_file, index=False)
-
-    print("Saved:", summary_file)
-
     figure_file = args.output_root / f"dominant_{args.model}_components_{args.year}.png"
     save_component_map(
         summary=summary,
@@ -551,13 +272,6 @@ def main() -> int:
             product_name=args.product,
             input_root=args.input_root,
         )
-        monthly_file = (
-            args.data_output_root
-            / f"monthly_dominant_{args.model}_components_{args.year}.parquet"
-        )
-        monthly.to_parquet(monthly_file, index=False)
-        print("Saved:", monthly_file)
-
         figure_file = (
             args.output_root
             / f"monthly_dominant_{args.model}_components_{args.year}.png"

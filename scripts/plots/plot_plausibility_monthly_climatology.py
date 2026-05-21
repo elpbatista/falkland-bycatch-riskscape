@@ -12,7 +12,6 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import argparse
-import calendar
 from pathlib import Path
 from typing import cast
 
@@ -30,14 +29,15 @@ import pandas as pd
 
 from riskscape.config import paths
 from riskscape.grid import load_grid
-from riskscape.visualization.base_map import (
-    MAP_CRS,
-    MapBounds,
-    OCEAN_COLOR,
-    draw_reference_layers,
-    load_reference_layers,
+from riskscape.visualization.base_map import MapBounds, load_reference_layers
+from riskscape.visualization.maps import draw_h3_column_panel, plausibility_path
+from riskscape.visualization.monthly_maps import (
+    add_monthly_colorbar_axis,
+    create_monthly_map_grid,
+    format_month_panel,
+    month_axes,
+    save_monthly_map,
 )
-from riskscape.visualization.maps import plausibility_path
 
 
 MODEL_NAME = "bayesian_gmm_k30"
@@ -45,7 +45,6 @@ PRODUCT_NAME = "joint"
 YEARS = list(range(2014, 2024))
 SPECIES = ["BBAL", "SAFS"]
 OUTPUT_ROOT = paths["plots"] / "plausibility"
-DATA_OUTPUT_ROOT = paths["data"] / "plot_exports" / "plausibility"
 VALUE_COL = "plausibility_non_zero_mean"
 CMAP = "viridis"
 
@@ -138,11 +137,6 @@ def monthly_climatology(
         return con.execute(query).df()
 
 
-def month_panel_title(month: int) -> str:
-    """Return a compact month title."""
-    return calendar.month_abbr[month]
-
-
 def plot_month_panel(
     ax: Axes,
     grid: gpd.GeoDataFrame,
@@ -154,36 +148,21 @@ def plot_month_panel(
     coast: gpd.GeoDataFrame,
 ) -> None:
     """Draw one monthly plausibility panel."""
-    ax.set_facecolor(OCEAN_COLOR)
-    bounds.apply_to_axis(ax, margin=0.35)
+    format_month_panel(ax, month=month, bounds=bounds)
 
     month_mask = cast(pd.Series, monthly["month"]).eq(month)
     month_values = monthly.loc[month_mask, ["h3", VALUE_COL]]
-    plot_gdf = grid.merge(month_values, on="h3", how="left")
-    plot_gdf = plot_gdf.dropna(subset=[VALUE_COL])
-
-    if not plot_gdf.empty:
-        plot_gdf.plot(
-            ax=ax,
-            column=VALUE_COL,
-            cmap=CMAP,
-            norm=norm,
-            legend=False,
-            edgecolor="none",
-            linewidth=0,
-        )
-
-    bbox_gdf = gpd.GeoDataFrame(
-        geometry=[bounds.geometry()],
-        crs=grid.crs or MAP_CRS,
+    draw_h3_column_panel(
+        ax=ax,
+        grid=grid,
+        values=month_values,
+        value_col=VALUE_COL,
+        norm=norm,
+        cmap=CMAP,
+        bounds=bounds,
+        land=land,
+        coast=coast,
     )
-
-    draw_reference_layers(ax, bbox_gdf, land, coast)
-    ax.set_title(month_panel_title(month), fontsize=11)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xlabel("")
-    ax.set_ylabel("")
 
 
 def plot_species_matrix(
@@ -203,15 +182,12 @@ def plot_species_matrix(
     bounds = MapBounds.from_config()
     norm = colors.Normalize(vmin=0.0, vmax=1.0)
 
-    fig, axes = plt.subplots(
-        nrows=4,
-        ncols=3,
-        figsize=(10.5, 16),
-        constrained_layout=False,
+    label = year_label(years)
+    fig, axes_flat = create_monthly_map_grid(
+        f"Monthly Non-Zero Mean Environmental Plausibility — {species} — {label}"
     )
-    axes_flat = cast(list[Axes], axes.ravel().tolist())
 
-    for month, ax in enumerate(axes_flat, start=1):
+    for month, ax in month_axes(axes_flat):
         plot_month_panel(
             ax=ax,
             grid=grid,
@@ -223,22 +199,7 @@ def plot_species_matrix(
             coast=coast,
         )
 
-    label = year_label(years)
-    fig.suptitle(
-        f"Monthly Non-Zero Mean Environmental Plausibility — {species} — {label}",
-        fontsize=16,
-        y=0.985,
-    )
-    fig.subplots_adjust(
-        left=0.025,
-        right=0.84,
-        top=0.95,
-        bottom=0.035,
-        wspace=0.15,
-        hspace=0.15,
-    )
-
-    cax = fig.add_axes((0.88, 0.20, 0.025, 0.60))
+    cax = add_monthly_colorbar_axis(fig)
     cbar = fig.colorbar(
         ScalarMappable(norm=norm, cmap=plt.get_cmap(CMAP)),
         cax=cax,
@@ -251,11 +212,7 @@ def plot_species_matrix(
         spine.set_visible(False)
 
     out_file = output_root / f"monthly_non_zero_mean_plausibility_{species}_{label}.png"
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    return out_file
+    return save_monthly_map(fig, out_file)
 
 
 def parse_args() -> argparse.Namespace:
@@ -289,13 +246,6 @@ def parse_args() -> argparse.Namespace:
         default=OUTPUT_ROOT,
         help="Directory for generated plausibility figures.",
     )
-    parser.add_argument(
-        "--data-output-root",
-        type=Path,
-        default=DATA_OUTPUT_ROOT,
-        help="Directory for generated plausibility summary exports.",
-    )
-
     return parser.parse_args()
 
 
@@ -315,14 +265,6 @@ def main() -> int:
         model_name=args.model,
         product_name=args.product,
     )
-
-    summary_file = (
-        args.data_output_root
-        / f"monthly_non_zero_mean_plausibility_{label}.parquet"
-    )
-    summary_file.parent.mkdir(parents=True, exist_ok=True)
-    monthly.to_parquet(summary_file, index=False)
-    print("Saved:", summary_file)
 
     for species in species_values:
         out_file = plot_species_matrix(

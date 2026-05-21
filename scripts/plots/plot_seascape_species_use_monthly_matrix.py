@@ -39,7 +39,7 @@ from riskscape.visualization.base_map import (
 
 
 YEAR = 2022
-MODEL_NAME = "kmeans_k10"
+MODEL_NAME = "som_15x15_hierarchical_k30"
 SPECIES = ["BBAL", "SAFS"]
 VALUE_COL = "seascape_non_zero_median_residence_index"
 AGG = "non_zero_median"
@@ -180,6 +180,7 @@ def plot_monthly_matrix(
     model_name: str,
     agg: str,
     vmax_quantile: float,
+    output_root: Path,
 ) -> Path:
     """Plot a 3-by-4 monthly species-use matrix."""
     value_col = normalize_agg(agg)
@@ -238,7 +239,7 @@ def plot_monthly_matrix(
     cbar.ax.tick_params(which="both", length=0, labelleft=False, labelright=False)
 
     out_file = (
-        OUTPUT_ROOT
+        output_root
         / f"seascape_species_use_{value_col}_{model_name}_{species}_{year}_all_months.png"
     )
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -272,6 +273,12 @@ def parse_args() -> argparse.Namespace:
         default=0.99,
         help="Upper quantile for the shared color scale.",
     )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=OUTPUT_ROOT,
+        help="Directory for generated seascape species-use figures.",
+    )
 
     return parser.parse_args()
 
@@ -294,6 +301,7 @@ def main() -> int:
             model_name=args.model_name,
             agg=args.agg,
             vmax_quantile=args.vmax_quantile,
+            output_root=args.output_root,
         )
         print(f"Saved: {out_file}")
 

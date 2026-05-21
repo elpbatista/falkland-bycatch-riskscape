@@ -62,6 +62,9 @@ reusable riskscape workflow/template.
   package for Zenodo.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
   replaced with a shorter contributor note.
+- Decide whether to remove the `scripts/riskscape/` import shim before release.
+  It is probably redundant once public scripts either run after
+  `pip install -e .` or bootstrap `src/` explicitly.
 - Retest `python scripts/data/download_data.py --dataset bathymetry` when CEDA's
   `dap.ceda.ac.uk` service is available.
 

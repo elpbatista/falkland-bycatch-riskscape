@@ -48,6 +48,7 @@ LOG_MINIMUM_EFFORT_UNIT = float(np.log1p(MINIMUM_EFFORT_UNIT))
 
 
 RISK_STYLE = MapStyle(
+    legend_mode="binned_quantile",
     color_scale="log",
     alpha_scale=False,
     alpha=0.90,
@@ -76,6 +77,7 @@ HAZARD_PLAUSIBILITY_STYLE = replace(
 
 SPECIES_USE_STYLE = MapStyle(
     title="Species Use",
+    legend_mode="continuous",
     colorbar_title="Species Use",
     show_reference_map=False,
     min_display_value=SPECIES_USE_LOG_MIN_DISPLAY,

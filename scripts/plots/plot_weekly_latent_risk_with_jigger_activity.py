@@ -24,8 +24,6 @@ matplotlib.use("Agg")
 
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from shapely.geometry import MultiLineString, MultiPolygon, Polygon
 
@@ -38,7 +36,6 @@ from plot_weekly_operator_latent_risk import (  # noqa: E402
     MODEL_NAME,
     PRODUCT_NAME,
     REPRESENTATIVE_WEEKS,
-    SMALL_MULTIPLES_COLORBAR_POSITION,
     SPECIES,
     START_YEAR,
     add_risk_colorbar,
@@ -56,6 +53,12 @@ from plot_weekly_operator_fisheries_grid_example import (  # noqa: E402
 from riskscape.config import paths  # noqa: E402
 from riskscape.grid import load_grid  # noqa: E402
 from riskscape.visualization.base_map import MapBounds, load_reference_layers  # noqa: E402
+from riskscape.visualization.weekly_maps import (  # noqa: E402
+    add_weekly_colorbar_axis,
+    create_weekly_map_grid,
+    save_weekly_map,
+    weekly_axes,
+)
 
 
 YEAR = 2022
@@ -222,48 +225,30 @@ def plot_small_multiples(
     style = risk_style(model_name, product_name, species_values)
     norm = risk_norm(style)
 
-    fig, axes = plt.subplots(
-        nrows=len(species_values),
-        ncols=len(weeks),
-        figsize=(4.0 * len(weeks), 5.1 * len(species_values)),
-        constrained_layout=False,
-    )
-    axes_array = np.atleast_2d(axes)
-
-    for row, species in enumerate(species_values):
-        for col, week in enumerate(weeks):
-            ax = cast(Axes, axes_array[row, col])
-            plot_panel(
-                ax=ax,
-                fisheries_grid=fisheries_grid,
-                limits=limits,
-                aggregated=aggregated_latent_risk,
-                species=species,
-                week=week,
-                norm=norm,
-                style=style,
-                bounds=bounds,
-                land=land,
-                coast=coast,
-            )
-            overlay_flag_fisheries_cells(ax, fisheries_grid, flag_cells, week)
-
     overlay_label = flag if flag is not None else "All Vessel"
-    fig.suptitle(
+    fig, axes_array = create_weekly_map_grid(
+        species_values,
+        weeks,
         f"Weekly Latent-Risk Climatology with {overlay_label} Fisheries Cells - {year}",
-        fontsize=16,
-        y=0.985,
-    )
-    fig.subplots_adjust(
-        left=0.02,
-        right=0.91,
-        top=0.93,
-        bottom=0.035,
-        wspace=0.09,
-        hspace=0.16,
     )
 
-    cax = fig.add_axes(SMALL_MULTIPLES_COLORBAR_POSITION)
+    for ax, species, week in weekly_axes(axes_array, species_values, weeks):
+        plot_panel(
+            ax=ax,
+            fisheries_grid=fisheries_grid,
+            limits=limits,
+            aggregated=aggregated_latent_risk,
+            species=species,
+            week=week,
+            norm=norm,
+            style=style,
+            bounds=bounds,
+            land=land,
+            coast=coast,
+        )
+        overlay_flag_fisheries_cells(ax, fisheries_grid, flag_cells, week)
+
+    cax = add_weekly_colorbar_axis(fig)
     add_risk_colorbar(
         ax=cast(Axes, axes_array[0, -1]),
         norm=norm,
@@ -272,10 +257,7 @@ def plot_small_multiples(
     )
 
     out_file = output_path(model_name, product_name, start_year, end_year, year, flag)
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    return out_file
+    return save_weekly_map(fig, out_file)
 
 
 def parse_args() -> argparse.Namespace:
