@@ -1,85 +1,39 @@
-import pandas as pd
-import numpy as np
-from riskscape.config import paths
-from riskscape.model.dataset import SPECIES_TARGET
+"""Inspect a generated parquet table."""
 
-# path = paths["data"] / "processed" / "h3_neighbor_index.parquet"
-path = paths["data"] / "features" / "environmental" / "year=2023/part.parquet"
-path = paths["data"] / "features" / "static" / "static.parquet"
-path = paths["data"] / "modeling" / "fishing_training" / "year=2022/part.parquet"
-path = paths["data"] / "modeling" / "species_training" / "year=2022/part.parquet"
-path = paths["data"] / "modeling" / "predictions" / "year=2022/part.parquet"
-path = paths["data"] / "modeling" / "predictions" / "extra_trees" / "bbal" / "year=2022/part.parquet"
-# path = paths["data"] / "processed" / "h3_neighbors.parquet"
-# print(df[["sst_grad", "chl_log_grad", "ssh_grad"]].describe())
+from __future__ import annotations
 
-df = pd.read_parquet(path)
+import argparse
 
-# print(df["risk_log_pred"].describe())
+from riskscape.qa import inspect_table
 
-# print("\nBy species: mean")
-# print(df.groupby(["h3", "species"])["risk_log_pred"].mean())
 
-# print("\nBy species: max")
-# print(df.groupby(["h3", "species"])["risk_log_pred"].max())
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Inspect a generated table")
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default="static",
+        help=(
+            "Parquet path or alias. Aliases include environmental, static, "
+            "fishing_training, species_training, and predictions."
+        ),
+    )
+    parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=5,
+        help="Number of head rows to print.",
+    )
+    return parser.parse_args()
 
-# print("\nBy month and species: mean")
-# df["month"] = df["date"].dt.month
-# print(df.groupby(["month", "species"])["risk_log_pred"].mean())
 
-# print("\nnonzero only")
-# print(df[df["risk_log_pred"] > 0]["risk_log_pred"].describe())
+def main() -> int:
+    """Inspect selected table."""
+    args = parse_args()
+    inspect_table(args.path, max_rows=args.max_rows)
+    return 0
 
-print("\nTop percentiles:")
-nonzero = df[df["risk_log_pred"] > 0]
-# print(nonzero["risk_log_pred"].quantile([0.50, 0.75, 0.99, 0.999]))
-print(df["risk_log_pred"].quantile([0.80, 0.98, 0.99, 1.0]))
-# print min and max nonzero values
-print("\nMin:", nonzero["risk_log_pred"].min())
-print("Max:", nonzero["risk_log_pred"].median())
-print("Max:", nonzero["risk_log_pred"].max())
 
-# print("\nConsistency with fishing activity:")
-# print(df[df["risk_log_pred"] > 0]["fishing_activity"].describe())
-
-# print("\nConsistency with fishing activity log:")
-# print(df[df["risk_log_pred"] > 0]["fishing_activity_log"].describe())
-
-# print("\nHotspots:")
-# print(df[df["risk_log_pred"] > df["risk_log_pred"].quantile(0.95)])
-
-# print("\nPersistent hotspots:")
-# print(df.groupby(["h3", "species"])["risk_log_pred"].mean().nlargest(50))
-
-# print("\nTemporal hotspots:")
-# print(df.groupby(["month", "species"])["risk_log_pred"].mean().nlargest(50))
-
-# print(df.columns.tolist())
-# print(df.dtypes)
-# print(df.head())
-
-# df.plot.scatter("chl_log", SPECIES_TARGET)
-
-# print(df["presence_count"].head(50))
-
-# for f in ["sst", "chl_log", "ssh"]:
-
-#     print(f, np.corrcoef(df[f], df[SPECIES_TARGET])[0, 1])
-
-# fg = pd.read_parquet("data/modeling/feature_grid/year=2022/part.parquet")
-
-# env = pd.read_parquet("data/features/environmental/year=2022/part.parquet")
-
-# print("env rows:", len(env))
-
-# print("feature_grid rows:", len(fg))
-
-# print("dropped:", len(env[["h3", "date"]].drop_duplicates()) - len(fg))
-
-# df = pd.read_parquet("data/modeling/species_training/year=2022/part.parquet")
-
-# print(df["residence_index"].quantile([0.5, 0.9, 0.95, 0.99]))
-
-# print(df.groupby("species")["residence_index"].describe())
-
-# print((df["residence_index"] > 0).mean())
+if __name__ == "__main__":
+    raise SystemExit(main())

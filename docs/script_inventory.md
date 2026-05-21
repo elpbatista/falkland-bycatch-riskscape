@@ -12,6 +12,9 @@ Status values:
 
 ## Reference and Data Acquisition
 
+- `keep` `scripts/run_pipeline.py`: Runs high-level workflow stages through
+  `src/riskscape/workflow.py`. This is the preferred public entry point once
+  source and reference data are available.
 - `keep` `scripts/download_reference_data.py`: Downloads public reference
   layers used by maps and overlays, including Natural Earth and SAERI-hosted
   Falklands layers where direct portal resources are available.

@@ -96,6 +96,16 @@ See `docs/workflow.md` for the current workflow map. The script inventory in
 `docs/script_inventory.md` tracks which scripts are intended to remain part of
 the documented workflow.
 
+After reference layers and source data are available, the grouped workflow
+entry point is:
+
+```bash
+python scripts/run_pipeline.py --stage all
+```
+
+Use `--stage all-with-downloads` to include external downloads, or run a named
+stage such as `spatial`, `features`, `model-tables`, `modeling`, or `checks`.
+
 ## Credentials
 
 Credentials must live outside committed files. The current convention is:

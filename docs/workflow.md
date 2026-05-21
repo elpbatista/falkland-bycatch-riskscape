@@ -18,6 +18,21 @@ Datasets in `config.yaml` have explicit roles:
 Datasets with `build_lookup: true` receive H3 lookup tables. Datasets with a
 `provider` are included in automatic source-data downloads.
 
+The preferred public entry point for generated products is:
+
+```bash
+python scripts/run_pipeline.py --stage all
+```
+
+`--stage all` starts after reference layers and source data have already been
+restored or downloaded. To include external downloads, run:
+
+```bash
+python scripts/run_pipeline.py --stage all-with-downloads
+```
+
+Individual scripts remain available for debugging, reruns, and targeted stages.
+
 ## 1. Restore Reference Layers
 
 Download public reference layers used by maps, spatial overlays, and study-area
@@ -62,7 +77,13 @@ Bathymetry is downloaded as a cropped GEBCO subset through CEDA OPeNDAP.
 
 Build the common H3 spatial frame and static grid-level features.
 
-Current script candidates:
+Run the grouped stage:
+
+```bash
+python scripts/run_pipeline.py --stage spatial
+```
+
+Granular scripts:
 
 - `scripts/build_grid.py`
 - `scripts/build_static_features.py`
@@ -83,7 +104,13 @@ Current script candidates:
 
 Align source data to the grid and construct the main feature tables.
 
-Current script candidates:
+Run the grouped stage:
+
+```bash
+python scripts/run_pipeline.py --stage features
+```
+
+Granular scripts:
 
 - `scripts/build_environmental_feature_table.py`
 - `scripts/build_fishing_effort_feature_table.py`
@@ -134,13 +161,25 @@ Diagnostic plots also support inspection:
 
 Combine feature tables into model-ready datasets.
 
-Current script candidates:
+Run the grouped stage:
+
+```bash
+python scripts/run_pipeline.py --stage model-tables
+```
+
+Granular script:
 
 - `scripts/build_model_datasets.py`
 
 ## 10. Train, Predict, and Evaluate
 
 Modeling scripts currently kept for public workflow documentation are:
+
+```bash
+python scripts/run_pipeline.py --stage modeling
+```
+
+Granular scripts:
 
 - `scripts/train_models.py`
 - `scripts/predict_models.py`
