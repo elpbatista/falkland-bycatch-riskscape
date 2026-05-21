@@ -20,6 +20,17 @@ reusable riskscape workflow/template.
   not tracked and remain ignored.
 - Rewrite the root `README.md` for the reusable workflow/template audience.
 - Prune stale docs and keep only the current public documentation set.
+- Add BSD-3-Clause license for code reuse with non-endorsement protection.
+- Add `CITATION.cff` with provisional repository citation metadata.
+- Expand `pyproject.toml` with package metadata and dependency groups.
+- Retire obsolete `config.run.yaml`; use `config.yaml` plus `.env` as the
+  current public configuration model.
+- Simplify `config.yaml` by removing obsolete path aliases and old `layer1`
+  settings, and make dataset roles/lookup behavior explicit.
+- Add a GEBCO/CEDA OPeNDAP bathymetry provider and credential path; live
+  download testing is currently blocked by CEDA `503 Service Unavailable`.
+- Reconcile `docs/script_inventory.md` with all current top-level
+  `scripts/*.py` entry points.
 
 ## Credential and Configuration Policy
 
@@ -27,9 +38,9 @@ reusable riskscape workflow/template.
 - Local credentials should live in provider-specific credential stores or in an
   ignored `.env` file.
 - `.env.example` is committed only as a template.
-- `config.run.yaml` needs a design decision before publishing. It comes from an
-  older notebook-reproduction workflow and may mix runtime state, date ranges,
-  local execution choices, and reproducibility metadata.
+- `config.yaml` is the canonical public workflow configuration.
+- Notebooks are presentation, tutorial, and inspection surfaces; they are not
+  the canonical pipeline orchestrator.
 
 ## External Archive Policy
 
@@ -42,20 +53,16 @@ reusable riskscape workflow/template.
 
 ## Deferred Design Decisions
 
-- Decide whether the public configuration model should use:
-  - `config.yaml` as the default reusable workflow configuration,
-  - `config.example.yaml` as the commented public template,
-  - ignored `config.local.yaml` or `.env` overrides for local settings,
-  - optional ignored `runs/<run-id>/config.yaml` snapshots for reproducibility.
-- Decide whether notebooks are public tutorials, execution records, or archived
-  development material.
+- Decide whether a future `config.example.yaml` is useful after the public
+  config settles.
+- Decide whether future ignored `runs/<run-id>/config.yaml` snapshots are useful
+  for reproducibility.
+- Review notebooks as tutorial/presentation/inspection material before release.
 - Decide which `data/` subfolders, plots, and model outputs are safe/useful to
   package for Zenodo.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
   replaced with a shorter contributor note.
+- Retest `python scripts/download_data.py --dataset bathymetry` when CEDA's
+  `dap.ceda.ac.uk` service is available.
 
 ## Still To Do
-
-- Add or confirm project license.
-- Add citation guidance.
-- Expand `pyproject.toml` with package metadata and dependencies.

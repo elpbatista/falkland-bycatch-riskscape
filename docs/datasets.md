@@ -74,4 +74,15 @@ temperature, chlorophyll-a, sea-surface height, wind, and bathymetry. These
 inputs are downloaded or prepared through provider-specific tooling and are
 written under ignored `data/` paths.
 
+Bathymetry is cropped from the GEBCO grid through CEDA OPeNDAP and written
+under the standard raw dataset folder:
+
+```text
+data/raw/bathymetry/
+```
+
+GEBCO requests attribution when the grid is used in presentations or
+publications; keep the configured product and CEDA archive path visible in
+metadata and documentation.
+
 See `config.yaml` and `docs/authentication.md` for provider setup.

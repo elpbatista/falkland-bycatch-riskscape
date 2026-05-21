@@ -7,6 +7,7 @@ credentials before data can be retrieved.
 - **Copernicus Marine Service (CMEMS)** – accessed through the `copernicusmarine` CLI
 - **Copernicus Climate Data Store (CDS / ERA5)** – accessed through the `cdsapi` Python client
 - **Global Fishing Watch (GFW)** – accessed with an API token stored outside the repository
+- **CEDA / GEBCO** – accessed through OPeNDAP; some scripted access requires a CEDA archive token
 
 ---
 
@@ -182,7 +183,29 @@ should read this value from the environment rather than from `config.yaml`.
 
 ---
 
-## 5. Credential Storage Locations
+## 5. CEDA / GEBCO
+
+GEBCO bathymetry is accessed through CEDA OPeNDAP. If anonymous access fails,
+create a CEDA archive access token and store it in `.env`:
+
+```text
+CEDA_TOKEN=YOUR_TOKEN
+```
+
+Alternatively, store your CEDA username and password in `.env`; the downloader
+will request a short-lived archive access token from CEDA's token API:
+
+```text
+CEDA_USERNAME=YOUR_USERNAME
+CEDA_PASSWORD=YOUR_PASSWORD
+```
+
+The downloader passes the resulting token as a bearer token when opening the
+OPeNDAP dataset.
+
+---
+
+## 6. Credential Storage Locations
 
 | Service               | Credential File                  |
 |-----------------------|----------------------------------|
@@ -190,12 +213,13 @@ should read this value from the environment rather than from `config.yaml`.
 | Copernicus Marine     | Stored by `copernicusmarine` CLI |
 | Copernicus CDS (ERA5) | `~/.cdsapirc`                    |
 | Global Fishing Watch  | `.env` / `GFW_TOKEN`             |
+| CEDA / GEBCO          | `.env` / `CEDA_TOKEN` or `CEDA_USERNAME` + `CEDA_PASSWORD` |
 
 (Windows equivalents use `%USERPROFILE%`.)
 
 ---
 
-## 6. Security Best Practices
+## 7. Security Best Practices
 
 - **Never commit credentials to version control**
 - Do not store passwords or API keys in:
@@ -210,5 +234,6 @@ Recommended approach:
 - `copernicusmarine login` for CMEMS  
 - `.cdsapirc` for CDS (ERA5)  
 - `.env` + `GFW_TOKEN` for Global Fishing Watch
+- `.env` + `CEDA_TOKEN`, or CEDA login credentials for CEDA/GEBCO when required
 
 Keep these files outside the repository and secured with proper file permissions.

@@ -182,7 +182,11 @@ def build_h3_lookup() -> list[Path]:
     """Build H3 lookups for all configured datasets."""
     outputs = []
 
-    for name in cfg["datasets"].keys():
+    for name, dataset_cfg in cfg["datasets"].items():
+        if not dataset_cfg.get("build_lookup", False):
+            logger.info("Skipping lookup for %s (build_lookup is false)", name)
+            continue
+
         out_file = build_dataset_h3_lookup(name)
         if out_file is not None:
             outputs.append(out_file)

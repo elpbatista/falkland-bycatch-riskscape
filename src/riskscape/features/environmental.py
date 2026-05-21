@@ -230,7 +230,11 @@ def write_year(df, year):
 def build_environmental_features():
     year_frames = defaultdict(list)
 
-    for name in cfg["datasets"].keys():
+    for name, dataset_cfg in cfg["datasets"].items():
+        if dataset_cfg.get("role") != "environmental":
+            logger.info("Skipping %s (role is not environmental)", name)
+            continue
+
         dataset_frames = build_dataset_features(name)
 
         for year, frames in dataset_frames.items():

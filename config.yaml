@@ -11,7 +11,6 @@ region:
   buffer_km: 50
 
 grid:
-  system: H3
   resolution: 6
 
 time:
@@ -23,13 +22,7 @@ paths:
   raw: "data/raw"
   processed: "data/processed"
   grids: "data/grids"
-  lookups: "data/lookups"
-  layer1: "data/layer1"
-  layer2: "data/layer2"
-  models: "data/models"
-  logs: "logs"
   plots: "plots"
-  reference: "reference"
 
 references:
   land: "reference/ne_10m_land/ne_10m_land.shp"
@@ -39,21 +32,29 @@ references:
 
 datasets:
   sst:
+    role: environmental
+    build_lookup: true
     provider: podaac
     product: MUR-JPL-L4-GLOB-v4.1
     variable: analysed_sst
 
   chl:
+    role: environmental
+    build_lookup: true
     provider: copernicus
     product: cmems_obs-oc_glo_bgc-plankton_my_l4-gapfree-multi-4km_P1D
     variable: CHL
 
   ssh:
+    role: environmental
+    build_lookup: true
     provider: copernicus
     product: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
     variable: adt
     
   wind:
+    role: environmental
+    build_lookup: true
     provider: cds
     product: derived-era5-single-levels-daily-statistics
     variables:
@@ -61,27 +62,22 @@ datasets:
       - 10m_v_component_of_wind
 
   gfw:
+    role: fishing_effort
+    build_lookup: false
     provider: gfw
   
   bathymetry:
+    role: static
+    build_lookup: true
     provider: gebco
-    product: gebco_2026
+    product: GEBCO_2026
+    source: ceda_opendap
+    ceda_archive_path: /bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc
+    opendap_base_url: https://dap.ceda.ac.uk/thredds/dodsC
     variable: elevation
 
 downloads:
   workers: 8
-
-layer1:
-  method: mean      # mean | centroid
-  variables:
-    - sst
-    - chl
-    - ssh
-
-  transforms:
-    chl: log10
-
-  standardize: true
 
 gfw:
   # Set the API token with GFW_TOKEN in a local .env file or environment.

@@ -14,10 +14,11 @@ and fisheries.
 - `src/riskscape/`: reusable Python package code.
 - `scripts/`: workflow entry points for downloading, feature building, modeling,
   prediction, evaluation, and plotting.
-- `notebooks/`: exploratory or tutorial notebooks for selected workflow stages.
+- `notebooks/`: tutorial, presentation, and inspection notebooks for selected
+  workflow stages.
 - `docs/`: current workflow, data, authentication, publishing, and script
   inventory notes.
-- `config.yaml`: default Falkland Islands workflow configuration.
+- `config.yaml`: canonical Falkland Islands workflow configuration.
 - `reference/README.md`: instructions for restoring public reference layers.
 
 Generated data, plots, downloaded reference layers, and model outputs are not
@@ -54,6 +55,18 @@ mode:
 pip install -e .
 ```
 
+To install optional data-provider clients used by download scripts:
+
+```bash
+pip install -e ".[downloads]"
+```
+
+To install optional SOM/seascape exploration dependencies:
+
+```bash
+pip install -e ".[seascapes]"
+```
+
 Copy the environment template if you need local credentials:
 
 ```bash
@@ -61,6 +74,10 @@ cp .env.example .env
 ```
 
 Edit `.env` locally. Do not commit it.
+
+`config.yaml` is the canonical public workflow configuration. Local secrets and
+runtime overrides belong in `.env`. Notebooks are not the pipeline orchestrator;
+they are used to present, demonstrate, and inspect workflow stages.
 
 ## Basic Workflow
 
@@ -94,3 +111,8 @@ See `docs/authentication.md` for details.
 
 This repository is mid-refactor for public release. The current checklist is in
 `docs/publishing_checklist.md`.
+
+## Citation
+
+Citation metadata are provided in `CITATION.cff`. A Zenodo DOI will be added
+when the first public release/archive is created.

@@ -50,6 +50,15 @@ def validate_datasets_exist(names: List[str], datasets: Dict) -> bool:
     return True
 
 
+def downloadable_dataset_names(datasets: Dict) -> List[str]:
+    """Return dataset names that define a download provider."""
+    return [
+        name
+        for name, ds in datasets.items()
+        if ds.get("provider")
+    ]
+
+
 def validate_provider(name: str, provider_name: str) -> bool:
     """Validate that a provider can be loaded."""
     if not provider_name:
@@ -137,7 +146,7 @@ def main() -> int:
         raw_dir = paths["raw"]
         raw_dir.mkdir(parents=True, exist_ok=True)
 
-        target_datasets = args.dataset if args.dataset else list(datasets.keys())
+        target_datasets = args.dataset if args.dataset else downloadable_dataset_names(datasets)
 
         if args.clean:
             logger.info("Cleaning dataset folders")

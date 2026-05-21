@@ -4,6 +4,20 @@ This document describes the intended public workflow at a high level. The
 script inventory in `docs/script_inventory.md` tracks which entry points are
 ready to keep and document.
 
+`config.yaml` is the canonical public workflow configuration. Local secrets and
+runtime overrides belong in `.env`. Notebooks may demonstrate and inspect
+workflow stages, but scripts and package code are the pipeline authority.
+
+Datasets in `config.yaml` have explicit roles:
+
+- `environmental`: raster/time-varying inputs used to build environmental
+  feature tables.
+- `fishing_effort`: fishing activity input downloaded from Global Fishing Watch.
+- `static`: spatial inputs that do not vary through time, such as bathymetry.
+
+Datasets with `build_lookup: true` receive H3 lookup tables. Datasets with a
+`provider` are included in automatic source-data downloads.
+
 ## 1. Restore Reference Layers
 
 Download public reference layers used by maps, spatial overlays, and study-area
@@ -28,7 +42,7 @@ See `docs/authentication.md`.
 
 ## 3. Download Source Data
 
-Download configured datasets:
+Download configured provider-backed datasets:
 
 ```bash
 python scripts/download_data.py
@@ -37,10 +51,12 @@ python scripts/download_data.py
 To download selected datasets:
 
 ```bash
-python scripts/download_data.py --dataset sst chl ssh wind gfw
+python scripts/download_data.py --dataset sst chl ssh wind gfw bathymetry
 ```
 
 Raw downloads are written under `data/raw/` and are ignored by Git.
+
+Bathymetry is downloaded as a cropped GEBCO subset through CEDA OPeNDAP.
 
 ## 4. Build Spatial Framework
 

@@ -24,7 +24,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 def bathymetry_path() -> Path:
     """Return GEBCO bathymetry path."""
-    return paths["raw"] / "bathymetry" / "gebco_2026_clipped.nc"
+    product = cfg.get("datasets", {}).get("bathymetry", {}).get(
+        "product",
+        "gebco",
+    )
+    return paths["raw"] / "bathymetry" / f"{product.lower()}.nc"
 
 
 def output_path() -> Path:

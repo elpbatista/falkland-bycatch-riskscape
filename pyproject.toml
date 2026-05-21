@@ -1,10 +1,72 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "riskscape"
-version = "0.1"
+name = "falkland-bycatch-riskscape"
+version = "0.1.0"
+description = "Reusable workflow components for dynamic bycatch riskscape modeling."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "PB Echevarría" },
+]
+keywords = [
+    "bycatch",
+    "fisheries",
+    "geospatial",
+    "risk modeling",
+    "seascapes",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "duckdb",
+    "geopandas",
+    "h3",
+    "joblib",
+    "matplotlib",
+    "netCDF4",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pyproj",
+    "PyYAML",
+    "scikit-learn",
+    "shapely",
+    "xarray",
+]
+
+[project.optional-dependencies]
+downloads = [
+    "cdsapi",
+    "copernicusmarine",
+    "gfwapiclient",
+    "pydap",
+    "requests",
+]
+seascapes = [
+    "minisom",
+    "scipy",
+]
+dev = [
+    "pyright",
+    "pytest",
+    "ruff",
+]
+
+[project.urls]
+Repository = "https://github.com/elpbatista/falkland-bycatch-riskscape"
+Issues = "https://github.com/elpbatista/falkland-bycatch-riskscape/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
