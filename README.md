@@ -12,8 +12,8 @@ and fisheries.
 ## What This Repository Contains
 
 - `src/riskscape/`: reusable Python package code.
-- `scripts/`: workflow entry points for downloading, feature building, modeling,
-  prediction, evaluation, and plotting.
+- `scripts/`: grouped workflow entry points; `scripts/run_pipeline.py` is the
+  preferred public front door.
 - `notebooks/`: tutorial, presentation, and inspection notebooks for selected
   workflow stages.
 - `docs/`: current workflow, data, authentication, publishing, and script
@@ -37,7 +37,7 @@ does not track generated or downloaded data folders such as:
 Reference layers can be restored with:
 
 ```bash
-python scripts/download_reference_data.py
+python scripts/data/download_reference_data.py
 ```
 
 Larger release bundles for derived data, selected plots, and model outputs are

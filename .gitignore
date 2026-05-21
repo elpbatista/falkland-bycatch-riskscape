@@ -1,70 +1,85 @@
-# Python
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
+
+# Packaging and build artifacts
+/build/
+/dist/
+/downloads/
+/*.egg-info/
+*.egg-info/
+*.egg
 .eggs/
-lib/
-lib64/
+develop-eggs/
+eggs/
 parts/
 sdist/
 var/
 wheels/
-*.egg-info/
 .installed.cfg
-*.egg
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
-.venv
 
-# IDE
+# IDE and editor files
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-# Environment
-.env
-.env.local
-
-# OS
-.DS_Store
-Thumbs.db
 *.swp
 *.swo
 
-# Project-specific
+# Local environment and credentials
+.env
+.env.local
 
-# Ignore data outputs
-data/
-plots/
-outputs/
-reference/*
-!reference/README.md
-logs/
-*/dev/
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Generated workflow outputs
+/data/
+/plots/
+/outputs/
+/logs/
+
+# Downloaded reference data. Keep only the restoration instructions.
+/reference/*
+!/reference/README.md
+
+# Local development scripts
+scripts/dev/
+
+# Keep organized script entry points trackable. These are intentionally named
+# like generated root folders, so keep the exceptions explicit.
+!scripts/data/
+!scripts/data/**/*.py
+!scripts/build/
+!scripts/build/**/*.py
+!scripts/plots/
+!scripts/plots/**/*.py
+!scripts/model/
+!scripts/model/**/*.py
+!scripts/qa/
+!scripts/qa/**/*.py
+!scripts/tools/
+!scripts/tools/**/*.py
+
+# Large/generated data artifacts anywhere in the tree
 *.parquet
 *.nc
 *.zip
 
-plots/*.csv
-plots/**/*.csv
-plots/predictions/weekly_operator/*.mp4
-plots/predictions/weekly_operator/*.gif
-plots/predictions/weekly_operator/frames/
-
-# Keep
-!src/
-!src/riskscape/
-!src/riskscape/downloads/
-!*/logs/
+# Selected generated media under root plots
+/plots/*.csv
+/plots/**/*.csv
+/plots/predictions/weekly_operator/*.mp4
+/plots/predictions/weekly_operator/*.gif
+/plots/predictions/weekly_operator/frames/

@@ -1,0 +1,73 @@
+"""Plot Bayesian GMM environmental plausibility maps."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SRC = _PROJECT_ROOT / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from riskscape.visualization.maps import (
+    MapStyle,
+    plausibility_path,
+    plot_plausibility_map,
+)
+
+
+YEAR = 2022
+MODEL_NAME = "bayesian_gmm_k30"
+VALUE_COL = "plausibility"
+AGG = "non_zero_mean"
+CONFIDENCE_THRESHOLD = None
+PLAUSIBILITY_MAP_NAME = "Non-zero mean plausibility"
+
+PLAUSIBILITY_STYLE = MapStyle(
+    title=None,
+    colorbar_title=PLAUSIBILITY_MAP_NAME,
+    cmap="viridis",
+    color_min=0.0,
+    color_max=1.0,
+    color_quantile=None,
+    show_reference_map=False,
+    colorbar_bottom_label="0",
+    colorbar_top_label="1",
+)
+
+
+def main() -> int:
+    """Run plausibility map plots."""
+    plot_products = [
+        ("joint", "BBAL"),
+        ("joint", "SAFS"),
+    ]
+
+    for product_name, species in plot_products:
+        input_path = plausibility_path(
+            year=YEAR,
+            model_name=MODEL_NAME,
+            product_name=product_name,
+        )
+        print(f"Input: {input_path}")
+
+        out_file = plot_plausibility_map(
+            year=YEAR,
+            model_name=MODEL_NAME,
+            product_name=product_name,
+            species=species,
+            value_col=VALUE_COL,
+            agg=AGG,
+            confidence_threshold=CONFIDENCE_THRESHOLD,
+            title=f"Non-zero mean plausibility environmental plausibility - {species} - {YEAR}",
+            style=PLAUSIBILITY_STYLE,
+        )
+        print(f"Saved: {out_file}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

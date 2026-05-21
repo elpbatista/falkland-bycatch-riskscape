@@ -4,7 +4,7 @@ This page records source datasets used or referenced by the Falkland Islands
 case-study workflow. It is not a complete data release manifest.
 
 Generated data products are not tracked in Git. Public reference layers can be
-restored with `scripts/download_reference_data.py`; larger derived data and
+restored with `scripts/data/download_reference_data.py`; larger derived data and
 plot bundles are intended for Zenodo releases.
 
 ## Public Reference Layers

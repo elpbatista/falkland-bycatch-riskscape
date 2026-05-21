@@ -7,7 +7,7 @@ reusable riskscape workflow/template.
 
 - Remove generated `outputs/` artifacts from Git and ignore future outputs.
 - Remove `scripts/dev/` from Git tracking and keep development scripts local.
-- Add `scripts/download_reference_data.py` for public reference-layer downloads.
+- Add `scripts/data/download_reference_data.py` for public reference-layer downloads.
 - Stop tracking downloaded `reference/` geospatial files.
 - Keep `reference/README.md` as the public entry point for restoring reference
   layers.
@@ -62,7 +62,7 @@ reusable riskscape workflow/template.
   package for Zenodo.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
   replaced with a shorter contributor note.
-- Retest `python scripts/download_data.py --dataset bathymetry` when CEDA's
+- Retest `python scripts/data/download_data.py --dataset bathymetry` when CEDA's
   `dap.ceda.ac.uk` service is available.
 
 ## Still To Do

@@ -39,7 +39,7 @@ Download public reference layers used by maps, spatial overlays, and study-area
 setup:
 
 ```bash
-python scripts/download_reference_data.py
+python scripts/data/download_reference_data.py
 ```
 
 Downloaded reference files are ignored by Git. See `reference/README.md`.
@@ -60,13 +60,13 @@ See `docs/authentication.md`.
 Download configured provider-backed datasets:
 
 ```bash
-python scripts/download_data.py
+python scripts/data/download_data.py
 ```
 
 To download selected datasets:
 
 ```bash
-python scripts/download_data.py --dataset sst chl ssh wind gfw bathymetry
+python scripts/data/download_data.py --dataset sst chl ssh wind gfw bathymetry
 ```
 
 Raw downloads are written under `data/raw/` and are ignored by Git.
@@ -85,8 +85,8 @@ python scripts/run_pipeline.py --stage spatial
 
 Granular scripts:
 
-- `scripts/build_grid.py`
-- `scripts/build_static_features.py`
+- `scripts/build/build_grid.py`
+- `scripts/build/build_static_features.py`
 
 ## 5. Build Lookups and Indices
 
@@ -95,10 +95,10 @@ neighbors, and other spatial relationships to the project grid.
 
 Current script candidates:
 
-- `scripts/build_h3_lookup.py`
-- `scripts/build_neighbor_table.py`
-- `scripts/build_neighbor_index_table.py`
-- `scripts/build_seasonal_lookup.py`
+- `scripts/build/build_h3_lookup.py`
+- `scripts/build/build_neighbor_table.py`
+- `scripts/build/build_neighbor_index_table.py`
+- `scripts/build/build_seasonal_lookup.py`
 
 ## 6. Build Primary Feature Tables
 
@@ -112,9 +112,9 @@ python scripts/run_pipeline.py --stage features
 
 Granular scripts:
 
-- `scripts/build_environmental_feature_table.py`
-- `scripts/build_fishing_effort_feature_table.py`
-- `scripts/build_species_presence_feature_table.py`
+- `scripts/build/build_environmental_feature_table.py`
+- `scripts/build/build_fishing_effort_feature_table.py`
+- `scripts/build/build_species_presence_feature_table.py`
 
 ## 7. Build Derived Variables
 
@@ -124,11 +124,11 @@ model-facing derived fields.
 
 Current script candidates:
 
-- `scripts/build_derived_features.py`
-- `scripts/build_environmental_gradients.py`
-- `scripts/build_environmental_anomalies.py`
-- `scripts/build_environmental_regime_table.py`
-- `scripts/build_seascape_species_use_surfaces.py`
+- `scripts/build/build_derived_features.py`
+- `scripts/build/build_environmental_gradients.py`
+- `scripts/build/build_environmental_anomalies.py`
+- `scripts/build/build_environmental_regime_table.py`
+- `scripts/build/build_seascape_species_use_surfaces.py`
 
 ## 8. Inspect and Validate Intermediate Products
 
@@ -137,25 +137,25 @@ run before treating outputs as model-ready.
 
 Current script candidates:
 
-- `scripts/inspect_columns.py`
-- `scripts/feature_qa_summary.py`
-- `scripts/quick_validation.py`
-- `scripts/run_correlation.py`
-- `scripts/run_relationships.py`
+- `scripts/qa/inspect_columns.py`
+- `scripts/qa/feature_qa_summary.py`
+- `scripts/qa/quick_validation.py`
+- `scripts/qa/run_correlation.py`
+- `scripts/qa/run_relationships.py`
 
 Diagnostic plots also support inspection:
 
-- `scripts/plot_environmental_histograms.py`
-- `scripts/plot_environmental_correlation_heatmap.py`
-- `scripts/plot_environmental_daily_timeseries.py`
-- `scripts/plot_environmental_monthly_matrix.py`
-- `scripts/plot_environmental_gradient_maps.py`
-- `scripts/plot_environmental_single_date_maps.py`
-- `scripts/plot_fishing_activity_map.py`
-- `scripts/plot_fishing_activity_monthly_matrix.py`
-- `scripts/plot_fishing_activity_monthly_timeseries.py`
-- `scripts/plot_species_presence_maps.py`
-- `scripts/plot_relationship_diagnostics.py`
+- `scripts/plots/plot_environmental_histograms.py`
+- `scripts/plots/plot_environmental_correlation_heatmap.py`
+- `scripts/plots/plot_environmental_daily_timeseries.py`
+- `scripts/plots/plot_environmental_monthly_matrix.py`
+- `scripts/plots/plot_environmental_gradient_maps.py`
+- `scripts/plots/plot_environmental_single_date_maps.py`
+- `scripts/plots/plot_fishing_activity_map.py`
+- `scripts/plots/plot_fishing_activity_monthly_matrix.py`
+- `scripts/plots/plot_fishing_activity_monthly_timeseries.py`
+- `scripts/plots/plot_species_presence_maps.py`
+- `scripts/plots/plot_relationship_diagnostics.py`
 
 ## 9. Assemble Model-Ready Datasets
 
@@ -169,7 +169,7 @@ python scripts/run_pipeline.py --stage model-tables
 
 Granular script:
 
-- `scripts/build_model_datasets.py`
+- `scripts/build/build_model_datasets.py`
 
 ## 10. Train, Predict, and Evaluate
 
@@ -181,9 +181,9 @@ python scripts/run_pipeline.py --stage modeling
 
 Granular scripts:
 
-- `scripts/train_models.py`
-- `scripts/predict_models.py`
-- `scripts/evaluate_models.py`
+- `scripts/model/train_models.py`
+- `scripts/model/predict_models.py`
+- `scripts/model/evaluate_models.py`
 
 ## 11. Plot Outputs
 
