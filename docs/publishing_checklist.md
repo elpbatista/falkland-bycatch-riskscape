@@ -35,10 +35,14 @@ reusable riskscape workflow/template.
   monthly-species bin settings so future plot runs preserve the accepted scale.
 - Start `docs/notebooks.md` to classify notebooks as workflow demonstrations,
   inspection material, or stale/review items.
-- Replace obsolete `config.run.yaml` notebooks with clean public notebook
-  drafts for workflow overview, reference layers, data sources, feature
-  engineering, model decisions, risk interpretation, operational outputs, and
-  diagnostics.
+- Replace obsolete `config.run.yaml` notebooks with clean public notebooks
+  for workflow overview, reference layers, data sources, feature engineering,
+  model decisions, risk interpretation, operational outputs, and diagnostics.
+- Publish the external Zenodo data bundle for derived data, selected plots, and
+  model-output artifacts, and record the data-bundle DOI in public docs.
+- Track selected static plot PNGs needed by the public notebooks while keeping
+  large animations, frames, CSV exports, generated data, and model outputs out
+  of Git.
 
 ## Credential and Configuration Policy
 
@@ -65,10 +69,6 @@ reusable riskscape workflow/template.
   config settles.
 - Decide whether future ignored `runs/<run-id>/config.yaml` snapshots are useful
   for reproducibility.
-- Review and polish the new public notebooks as tutorial, presentation, and
-  inspection material before release.
-- Decide which `data/` subfolders, plots, and model outputs are safe/useful to
-  package for Zenodo.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
   replaced with a shorter contributor note.
 - Decide whether to remove the `scripts/riskscape/` import shim before release.
@@ -84,10 +84,10 @@ reusable riskscape workflow/template.
 
 - Review the root `README.md` one more time after the final public workflow
   stages are stable.
-- Audit tracked files before release to confirm generated data, plots, local
-  credentials, and packaging artifacts are absent.
-- Decide which derived data, plots, and model outputs should be bundled for
-  Zenodo, then create a manifest and checksums.
+- Audit tracked files before release to confirm generated data, local
+  credentials, large animations, tabular plot exports, and packaging artifacts
+  are absent.
 - Create the first GitHub release when code, docs, and archive manifests are
-  ready; Zenodo will mint the DOI from that release.
-- Add the Zenodo DOI to `CITATION.cff` and `README.md` after it exists.
+  ready; Zenodo will mint the repository/software DOI from that release.
+- Add the repository/software DOI to `CITATION.cff` and `README.md` after it
+  exists.

@@ -21,8 +21,9 @@ and fisheries.
 - `config.yaml`: canonical Falkland Islands workflow configuration.
 - `reference/README.md`: instructions for restoring public reference layers.
 
-Generated data, plots, downloaded reference layers, and model outputs are not
-stored in Git.
+Generated data, downloaded reference layers, and model outputs are not
+stored in Git. Selected static plot PNGs are tracked because the public
+notebooks use them as explanatory figures.
 
 ## Data Policy
 
@@ -30,9 +31,12 @@ This repository tracks code, documentation, and lightweight configuration. It
 does not track generated or downloaded data folders such as:
 
 - `data/`
-- `plots/`
 - `outputs/`
 - downloaded files under `reference/`
+
+Selected static PNG figures under `plots/` are tracked for the public
+notebooks. Large animations, intermediate frames, and tabular plot exports stay
+outside Git and are included in the Zenodo data bundle when needed.
 
 Reference layers can be restored with:
 
@@ -41,9 +45,14 @@ python scripts/data/download_reference_data.py
 ```
 
 Larger release bundles for derived data, selected plots, and model outputs are
-archived externally on Zenodo:
+archived externally on Zenodo. The data-bundle concept DOI, which resolves to
+the latest version, is:
 
 <https://doi.org/10.5281/zenodo.20334806>
+
+Zenodo recommends citing the current data bundle as:
+
+Batista Echevarría, J. L. (2026). Falkland Bycatch Riskscape Data Bundle [Data set]. Zenodo. <https://doi.org/10.5281/zenodo.20337229>
 
 Some source datasets may require provider credentials, access approval, or
 collaborator permission. See `docs/datasets.md` and `docs/authentication.md`.
@@ -142,6 +151,10 @@ will need a careful second-pass refactor after the release-critical cleanup.
 Citation metadata are provided in `CITATION.cff`. A repository/software DOI
 will be added after the public repository release is published.
 
-The associated Zenodo data bundle is available at:
+The associated Zenodo data bundle has a concept DOI for the latest version:
 
 <https://doi.org/10.5281/zenodo.20334806>
+
+Zenodo recommends citing the current data bundle as:
+
+Batista Echevarría, J. L. (2026). Falkland Bycatch Riskscape Data Bundle [Data set]. Zenodo. <https://doi.org/10.5281/zenodo.20337229>
