@@ -6,6 +6,11 @@ Reusable workflow components for building dynamic bycatch riskscapes from
 species observations, fishing effort, environmental data, and spatial reference
 layers.
 
+New readers should start with the user-friendly workflow notebooks in
+[`notebooks/`](notebooks/). They explain the case study, data sources, feature
+engineering, model decisions, prediction products, operational outputs, and
+quality checks with figures and short code snippets.
+
 The repository is organized as a Python package plus executable workflow
 scripts. The Falkland Islands case study is the worked example, but the project
 is being prepared as a template that can be adapted to other regions, species,
