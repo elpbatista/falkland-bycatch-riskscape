@@ -2,14 +2,15 @@ cff-version: 1.2.0
 message: "If you use this workflow, please cite it using the metadata below."
 title: "Falkland Bycatch Riskscape Workflow"
 authors:
-  - name: "PB Echevarría"
+  - name: "Batista Echevarría, J. L."
+    orcid: "0009-0005-9849-8322"
 version: 0.1.0
 license: BSD-3-Clause
 repository-code: "https://github.com/elpbatista/falkland-bycatch-riskscape"
 references:
   - type: data
     title: "Falkland Bycatch Riskscape Data Bundle"
-    doi: "10.5281/zenodo.20334806"
+    doi: "10.5281/zenodo.20337229"
 abstract: >
   Reusable workflow components for building dynamic bycatch riskscapes from
   species observations, fishing effort, environmental data, and spatial

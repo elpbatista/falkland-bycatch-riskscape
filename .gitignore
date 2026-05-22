@@ -46,7 +46,6 @@ Thumbs.db
 
 # Generated workflow outputs
 /data/
-/plots/
 /outputs/
 /logs/
 
