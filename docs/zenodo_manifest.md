@@ -1,7 +1,4 @@
-# Zenodo Data Manifest
-
-This page records the current decision about which local products are useful
-enough to upload to Zenodo alongside a repository release.
+# Zenodo Data Bundle
 
 Zenodo concept DOI, latest version:
 <https://doi.org/10.5281/zenodo.20334806>
@@ -9,150 +6,118 @@ Zenodo concept DOI, latest version:
 Recommended citation DOI:
 <https://doi.org/10.5281/zenodo.20337229>
 
-It is a working manifest, not a final upload receipt. Update it after the
-archive is finalized with the version and exact file names.
+This page documents the released data bundle associated with repository release
+`v0.1.0`. The bundle contains derived products, selected figures, and model
+outputs that are useful for reproducing the Falkland Islands case study without
+placing large generated artifacts in Git.
 
-This manifest is based on the non-raw data assessment in
-`docs/data_folder_assessment.md`. Raw provider downloads under `data/raw/` are
-not assessed here and are not Zenodo candidates.
+Raw provider downloads under `data/raw/` are not included. Download or restore
+raw inputs through the provider-specific instructions in `docs/datasets.md` and
+`docs/authentication.md`.
 
-## Recommended Upload
+## Released Files
 
-These products are the strongest candidates because they are reusable results
-from the workflow and are not simply raw provider downloads.
-
-### Production Predictions
-
-Path:
-`data/modeling/predictions/hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30/`
+### `README.md`
 
 Size:
-part of the `2.9G` predictions folder.
+`2.9 kB`.
 
-Reason:
-main annual gridded prediction products for the selected production model.
+Description:
+archive-level README describing the bundle contents and restoration pattern.
 
-### Weekly Operational Products
-
-Path:
-`data/modeling/weekly_operator/hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30/`
+### `falkland-bycatch-riskscape-grids-v0.1.0.tar.gz`
 
 Size:
-part of the `444M` weekly-operator folder.
+`17.6 MB`.
 
-Reason:
-operational weekly latent-risk products, including climatology and 2022
-sequence outputs.
+Restore to:
+`data/grids/`.
 
-### Weekly Plot Exports
+Description:
+H3 study grid files and spatial index products.
 
-Path:
-`data/plot_exports/weekly_operator/hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30/`
-
-Size:
-part of the `2.1M` weekly plot exports folder.
-
-Reason:
-small tabular summaries that support the operational figures.
-
-### H3 Study Grid
-
-Path:
-`data/grids/`
+### `falkland-bycatch-riskscape-processed-v0.1.0.tar.gz`
 
 Size:
-`36M`.
+`116.4 MB`.
 
-Reason:
-exact H3 study frame used by the workflow. Including it avoids ambiguity about
-the spatial domain and lets users inspect products without rebuilding the grid.
+Restore to:
+`data/processed/`.
 
-### Processed Lookups and Indices
+Description:
+lookup tables, neighbor tables, seasonal lookup products, and other processed
+indices used by feature builders and QA checks.
 
-Path:
-`data/processed/`
-
-Size:
-`151M`.
-
-Reason:
-reusable lookup and index products, including H3 lookups, neighbor tables,
-seasonal lookup, and static/environmental lookup outputs.
-
-### Environmental Regimes
-
-Path:
-`data/modeling/environmental_regimes/`
+### `falkland-bycatch-riskscape-features-v0.1.0.tar.gz`
 
 Size:
-`674M`.
+`4.8 GB`.
 
-Reason:
-consolidated H3/date environmental-regime table. It stores the selected SOM
-hierarchical k30 seascape assignment (`som_prototype`, `seascape`,
-`seascape_distance`) together with Bayesian GMM k30 component assignments
-(`bayesian_gmm_k30_component`, probability, and entropy). These fields support
-seascape maps, component maps, blocked diagnostics, and seascape-conditioned
-products.
+Restore to:
+`data/features/`.
 
-### Seascape-Conditioned Species Use
+Description:
+yearly environmental, fishing-effort, and species-use feature partitions.
 
-Path:
-`data/modeling/seascape_species_use/som_15x15_hierarchical_k30/`
+### `falkland-bycatch-riskscape-modeling-v0.1.0.tar.gz`
 
 Size:
-`156M`.
+`11.7 GB`.
 
-Reason:
-experimental 2022 species-use surface conditioned on the selected SOM
-seascapes. It supports the 2022 seascape-conditioned species-use and risk
-matrices and can be regenerated with
-`python3 scripts/build/build_seascape_species_use_surfaces.py --years 2022`.
+Restore to:
+`data/modeling/`.
 
-### Plausibility Products
+Description:
+model-ready tables, selected model artifacts, environmental regimes,
+plausibility products, predictions, weekly operator products, validation
+metrics, and seascape-conditioned exploratory products.
 
-Path:
-`data/modeling/plausibility/bayesian_gmm_k30/`
-
-Size:
-part of the `1.1G` plausibility folder.
-
-Reason:
-plausibility surfaces used to combine environmental support with species-use
-predictions.
-
-### Metrics
-
-Paths:
-
-- `data/modeling/metrics/species_model_extra_trees_som_hierarchical_k30_5fold_blockcv_production_metrics.csv`
-- `data/modeling/metrics/species_model_block_cv_selected_som_k30_5fold.csv`
-- `data/modeling/metrics/species_model_block_cv_selected_som_k30_5fold.md`
-- `data/modeling/metrics/bayesian_gmm_component_comparison.csv`
-- `data/modeling/metrics/seascapes/seascape_summary_som_15x15_hierarchical_k30_2014-2023.csv`
+### `falkland-bycatch-riskscape-plot_exports-v0.1.0.tar.gz`
 
 Size:
-small.
+`66.0 MB`.
 
-Reason:
-production model metrics, selected model block-CV summaries, Bayesian GMM
-component comparison used for plausibility decisions, and the selected
-seascape summary.
+Restore to:
+`data/plot_exports/`.
 
-### Final Figures
+Description:
+tabular plot-support products and diagnostics used by plotting scripts.
 
-Path:
-`plots/`
+### `falkland-bycatch-riskscape-plots-v0.1.0.tar.gz`
 
 Size:
-`580M`.
+`580.2 MB`.
 
-Reason:
-final figure bundle for inspection, presentation, and reuse.
+Restore to:
+`plots/`.
+
+Description:
+static figures, diagnostics, operational maps, and presentation outputs. Some
+selected static PNGs are also tracked directly in Git because the public
+notebooks display them.
+
+## Restore Layout
+
+After downloading and extracting the bundle files, the repository should have
+this local structure:
+
+```text
+falkland-bycatch-riskscape/
+├── data/
+│   ├── grids/
+│   ├── processed/
+│   ├── features/
+│   ├── modeling/
+│   └── plot_exports/
+└── plots/
+```
+
+Extract each archive from the repository root, or copy the extracted folder
+contents into the matching destination above.
 
 ## Do Not Upload
 
-These products should not go to Zenodo as part of the reusable project archive.
+These products are intentionally excluded from the data bundle.
 
 ### Deprecated Model Outputs
 
@@ -173,53 +138,9 @@ Scope:
 Reason:
 these are local system artifacts.
 
-## Conditional Upload
+## Notes
 
-These may be useful, but need a deliberate decision before inclusion.
-
-### Feature Tables
-
-Path:
-`data/features/`
-
-Decision needed:
-large feature tables; include only if the goal is to let users skip feature
-construction.
-
-### Model Objects
-
-Path:
-`data/modeling/models/`
-
-Decision needed:
-model objects can be useful, but only if they are stable, documented, and
-loadable across environments.
-
-### Plot Exports
-
-Path:
-`data/plot_exports/`
-
-Decision needed:
-include selected subfolders when they support published figures or operational
-outputs.
-
-## Suggested Zenodo Package Layout
-
-```text
-zenodo/
-  README.md
-  predictions/
-  grids/
-  processed/
-  weekly_operator/
-  environmental_regimes/
-  plausibility/
-  metrics/
-  plot_exports/
-  plots/
-```
-
-The archive README should state the repository release tag used to generate the
-files, the date of generation, the selected model name, and any data that are
-not redistributed.
+The bundle reflects the first public release. Some products can be regenerated
+from source data and scripts; others depend on restricted or provider-gated
+inputs. The public notebooks describe the role of each product family and the
+quality checks used to inspect them.

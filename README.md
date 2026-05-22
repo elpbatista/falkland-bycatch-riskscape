@@ -1,5 +1,7 @@
 # Falkland Bycatch Riskscape Workflow
 
+[![DOI](https://zenodo.org/badge/1146981351.svg)](https://doi.org/10.5281/zenodo.20348905)
+
 Reusable workflow components for building dynamic bycatch riskscapes from
 species observations, fishing effort, environmental data, and spatial reference
 layers.
@@ -140,11 +142,13 @@ Credentials must live outside committed files. The current convention is:
 
 See `docs/authentication.md` for details.
 
-## Publishing Status
+## Project Status
 
-This repository is mid-refactor for public release. The current checklist is in
-`docs/publishing_checklist.md`. The visualization scripts are functional but
-will need a careful second-pass refactor after the release-critical cleanup.
+This is the first public workflow release. The repository is usable as a
+documented Falkland Islands case study and as a template for related riskscape
+modeling projects. Some internals, especially visualization utilities and a few
+provider download paths, are intentionally left for post-release refactoring.
+Current maintenance notes are tracked in `docs/publishing_checklist.md`.
 
 ## Citation
 

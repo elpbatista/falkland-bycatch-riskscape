@@ -13,9 +13,10 @@ in `scripts/` and reusable logic should live in `src/riskscape/`.
 - `defer`: exploratory or private scratch material that should not be promoted
   without deliberate cleanup.
 
-Before release, public notebooks should have markdown context, no credentials,
-no large stale embedded outputs, and should not depend on obsolete orchestration
-files.
+Public notebooks should have markdown context, no credentials, no large stale
+embedded outputs, and should not depend on obsolete orchestration files. They
+are expected to run after the repository is installed and the Zenodo data bundle
+or regenerated local products are available.
 
 ## Current Notebooks
 

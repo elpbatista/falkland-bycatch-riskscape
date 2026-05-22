@@ -1,7 +1,8 @@
-# Publishing Checklist
+# Release and Maintenance Notes
 
-This checklist tracks cleanup decisions for preparing the repository as a
-reusable riskscape workflow/template.
+This page records the main cleanup decisions made for the first public release
+and the remaining post-release maintenance items. It is not a user guide; see
+`README.md`, `docs/workflow.md`, and the public notebooks for normal use.
 
 ## Completed
 
@@ -21,7 +22,7 @@ reusable riskscape workflow/template.
 - Rewrite the root `README.md` for the reusable workflow/template audience.
 - Prune stale docs and keep only the current public documentation set.
 - Add BSD-3-Clause license for code reuse with non-endorsement protection.
-- Add `CITATION.cff` with provisional repository citation metadata.
+- Add `CITATION.cff` with repository/software DOI metadata.
 - Expand `pyproject.toml` with package metadata and dependency groups.
 - Retire obsolete `config.run.yaml`; use `config.yaml` plus `.env` as the
   current public configuration model.
@@ -71,7 +72,8 @@ reusable riskscape workflow/template.
   for reproducibility.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
   replaced with a shorter contributor note.
-- Decide whether to remove the `scripts/riskscape/` import shim before release.
+- Decide whether to remove the `scripts/riskscape/` import shim in a future
+  cleanup pass.
   It is probably redundant once public scripts either run after
   `pip install -e .` or bootstrap `src/` explicitly.
 - Retest `python scripts/data/download_data.py --dataset bathymetry` when CEDA's
@@ -80,14 +82,17 @@ reusable riskscape workflow/template.
   visualization refactor only with original scripts/commands and visual
   regression outputs available.
 
-## Still To Do
+## Post-Release Maintenance
 
-- Review the root `README.md` one more time after the final public workflow
-  stages are stable.
-- Audit tracked files before release to confirm generated data, local
+- Keep `README.md`, `CITATION.cff`, and `docs/zenodo_manifest.md` synchronized
+  with future repository and data-bundle releases.
+- Audit tracked files before future releases to confirm generated data, local
   credentials, large animations, tabular plot exports, and packaging artifacts
   are absent.
-- Create the first GitHub release when code, docs, and archive manifests are
-  ready; Zenodo will mint the repository/software DOI from that release.
-- Add the repository/software DOI to `CITATION.cff` and `README.md` after it
-  exists.
+- Add focused tests for config loading, path resolution, H3/date key handling,
+  feature schemas, and plotting scale specifications.
+- Refactor visualization utilities carefully with visual regression outputs
+  available, because accepted figures currently depend on custom scale and
+  colorbar behavior.
+- Finish and retest GEBCO/CEDA bathymetry download handling when the provider
+  service is available.

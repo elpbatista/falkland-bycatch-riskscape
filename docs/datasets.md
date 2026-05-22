@@ -5,7 +5,8 @@ case-study workflow. It is not a complete data release manifest.
 
 Generated data products are not tracked in Git. Public reference layers can be
 restored with `scripts/data/download_reference_data.py`; larger derived data and
-plot bundles are intended for Zenodo releases.
+plot bundles are archived in the Zenodo data bundle listed in the repository
+README and `docs/zenodo_manifest.md`.
 
 ## Public Reference Layers
 
