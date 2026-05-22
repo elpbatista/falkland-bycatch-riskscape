@@ -28,7 +28,7 @@ MODEL_NAMES = [
     "hist_gradient_boosting",
     "random_forest",
     "extra_trees",
-    # "gmm",
+    "gmm",
     "bayesian_gmm",
 ]
 

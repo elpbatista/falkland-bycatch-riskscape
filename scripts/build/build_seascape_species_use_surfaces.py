@@ -20,7 +20,7 @@ from riskscape.config import paths
 from riskscape.model.dataset import modeling_root
 
 
-YEARS = "2014-2023"
+YEARS = "2022"
 MODEL_NAME = "som_15x15_hierarchical_k30"
 PREDICTION_MODEL = (
     "hybrid_presence_gate_extra_trees_som_hierarchical_k30_5fold_blockcv_bayesian_gmm_k30"
@@ -100,12 +100,7 @@ def prediction_path(year: int) -> Path:
 
 def seascape_path(year: int, model_name: str) -> Path:
     """Return seascape assignment partition path."""
-    return (
-        modeling_root("seascapes")
-        / model_name
-        / f"year={year}"
-        / "part.parquet"
-    )
+    return modeling_root("environmental_regimes") / f"year={year}" / "part.parquet"
 
 
 def surface_path(year: int, model_name: str) -> Path:

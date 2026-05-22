@@ -42,23 +42,8 @@ class Candidate:
 
 CANDIDATES = [
     Candidate(
-        name="kmeans_k15",
-        table="environmental_regimes",
-        class_column="kmeans_k15",
-    ),
-    Candidate(
-        name="som_k15",
-        table="seascapes/som_15x15_hierarchical_k15",
-        class_column="seascape",
-    ),
-    Candidate(
-        name="som_k18",
-        table="seascapes/som_15x15_hierarchical_k18",
-        class_column="seascape",
-    ),
-    Candidate(
         name="som_k30",
-        table="seascapes/som_15x15_hierarchical_k30",
+        table="environmental_regimes",
         class_column="seascape",
     ),
 ]

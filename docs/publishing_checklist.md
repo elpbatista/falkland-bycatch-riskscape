@@ -31,6 +31,14 @@ reusable riskscape workflow/template.
   download testing is currently blocked by CEDA `503 Service Unavailable`.
 - Reconcile `docs/script_inventory.md` with all current top-level
   `scripts/*.py` entry points.
+- Record the seascape latent-risk matrix plotting command with its tuned
+  monthly-species bin settings so future plot runs preserve the accepted scale.
+- Start `docs/notebooks.md` to classify notebooks as workflow demonstrations,
+  inspection material, or stale/review items.
+- Replace obsolete `config.run.yaml` notebooks with clean public notebook
+  drafts for workflow overview, reference layers, data sources, feature
+  engineering, model decisions, risk interpretation, operational outputs, and
+  diagnostics.
 
 ## Credential and Configuration Policy
 
@@ -57,7 +65,8 @@ reusable riskscape workflow/template.
   config settles.
 - Decide whether future ignored `runs/<run-id>/config.yaml` snapshots are useful
   for reproducibility.
-- Review notebooks as tutorial/presentation/inspection material before release.
+- Review and polish the new public notebooks as tutorial, presentation, and
+  inspection material before release.
 - Decide which `data/` subfolders, plots, and model outputs are safe/useful to
   package for Zenodo.
 - Review `docs/code_style_guide.md` for whether it should remain public or be
@@ -67,5 +76,18 @@ reusable riskscape workflow/template.
   `pip install -e .` or bootstrap `src/` explicitly.
 - Retest `python scripts/data/download_data.py --dataset bathymetry` when CEDA's
   `dap.ceda.ac.uk` service is available.
+- Treat the visualization module as functional but fragile. Do a later
+  visualization refactor only with original scripts/commands and visual
+  regression outputs available.
 
 ## Still To Do
+
+- Review the root `README.md` one more time after the final public workflow
+  stages are stable.
+- Audit tracked files before release to confirm generated data, plots, local
+  credentials, and packaging artifacts are absent.
+- Decide which derived data, plots, and model outputs should be bundled for
+  Zenodo, then create a manifest and checksums.
+- Create the first GitHub release when code, docs, and archive manifests are
+  ready; Zenodo will mint the DOI from that release.
+- Add the Zenodo DOI to `CITATION.cff` and `README.md` after it exists.

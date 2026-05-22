@@ -29,11 +29,12 @@ DEFAULT_MODEL_PATH = (
     paths["data"]
     / "modeling"
     / "models"
-    / "bayesian_gmm"
+    / "bayesian_gmm_k30"
     / "species_model_joint.joblib"
 )
 
-DEFAULT_OUT_ROOT = modeling_root("cube_components")
+DEFAULT_OUTPUT_TABLE = "cube_components_bayesian_gmm_k30"
+DEFAULT_OUT_ROOT = modeling_root(DEFAULT_OUTPUT_TABLE)
 
 BATCH_ROWS = 250_000
 LOG_2PI = np.log(2.0 * np.pi)
@@ -331,10 +332,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-table",
-        default="cube_components",
+        default=DEFAULT_OUTPUT_TABLE,
         help=(
-            "Modeling table name for outputs. Defaults to cube_components. "
-            "Use a different name for extension products to avoid overwriting."
+            "Modeling table name for outputs. Defaults to the selected "
+            "Bayesian GMM k30 component table."
         ),
     )
 

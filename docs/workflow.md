@@ -206,6 +206,7 @@ Run plot groups with:
 python scripts/plots/plot_all_maps.py --group context
 python scripts/plots/plot_all_maps.py --group environmental
 python scripts/plots/plot_all_maps.py --group predictions
+python scripts/plots/plot_all_maps.py --group seascapes
 python scripts/plots/plot_all_maps.py --group weekly
 python scripts/plots/plot_all_maps.py --group gear
 python scripts/plots/plot_all_maps.py --group videos
@@ -241,12 +242,17 @@ Seascape and component plots:
 - `scripts/plots/plot_seascape_species_use_monthly_matrix.py`
 - `scripts/plots/plot_seascape_prediction_maps.py`
 - `scripts/plots/plot_seascape_prediction_maps.py --monthly-matrix --matrix-values species_use_log_pred risk_log_pred`
+- `scripts/plots/plot_prediction_latent_risk_monthly_matrix.py --model-name seascape_som_15x15_hierarchical_k30 --product-name joint --year 2022 --agg non_zero_mean --color-bin-source monthly_species --color-quantiles 0 0.55 0.80 0.95 1.0`
 
 Gear-aware plots:
 
 - `scripts/plots/plot_set_longline_bbal_risk_example.py`
-- `scripts/plots/plot_all_maps.py`
-- `scripts/plots/test_prediction_maps.py`
+- `scripts/plots/plot_weekly_gear_aware_risk_examples.py`
+
+The visualization module is functional at this point, but several plot families
+still carry presentation-specific scale and legend choices. Preserve those
+settings until a deliberate visualization refactor has visual regression
+references.
 
 ## Publishing Note
 

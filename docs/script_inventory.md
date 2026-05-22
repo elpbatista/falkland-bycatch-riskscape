@@ -133,7 +133,11 @@ Status values:
   diagnostics.
 - `keep` `scripts/plots/plot_prediction_maps.py`: Plots model prediction maps.
 - `review` `scripts/plots/plot_prediction_latent_risk_monthly_matrix.py`: Plots
-  monthly latent-risk matrices from prediction outputs.
+  monthly latent-risk matrices from prediction outputs. For seascape-based
+  latent-risk matrices, preserve the original tuned scale:
+  `--model-name seascape_som_15x15_hierarchical_k30 --product-name joint --year
+  2022 --agg non_zero_mean --color-bin-source monthly_species --color-quantiles
+  0 0.55 0.80 0.95 1.0`.
 - `review` `scripts/plots/plot_species_feature_importance.py`: Plots feature
   importance for selected species-use models.
 - `review` `scripts/plots/plot_species_partial_dependence.py`: Plots manual partial

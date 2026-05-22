@@ -16,8 +16,8 @@ and fisheries.
   preferred public front door.
 - `notebooks/`: tutorial, presentation, and inspection notebooks for selected
   workflow stages.
-- `docs/`: current workflow, data, authentication, publishing, and script
-  inventory notes.
+- `docs/`: current workflow, data, authentication, notebook, publishing, and
+  script inventory notes.
 - `config.yaml`: canonical Falkland Islands workflow configuration.
 - `reference/README.md`: instructions for restoring public reference layers.
 
@@ -41,7 +41,9 @@ python scripts/data/download_reference_data.py
 ```
 
 Larger release bundles for derived data, selected plots, and model outputs are
-intended to be archived externally on Zenodo.
+archived externally on Zenodo:
+
+<https://doi.org/10.5281/zenodo.20334807>
 
 Some source datasets may require provider credentials, access approval, or
 collaborator permission. See `docs/datasets.md` and `docs/authentication.md`.
@@ -94,7 +96,8 @@ is:
 
 See `docs/workflow.md` for the current workflow map. The script inventory in
 `docs/script_inventory.md` tracks which scripts are intended to remain part of
-the documented workflow.
+the documented workflow, including plot commands with custom scale settings.
+Notebook roles and cleanup needs are tracked in `docs/notebooks.md`.
 
 After reference layers and source data are available, the grouped workflow
 entry point is:
@@ -105,6 +108,17 @@ python scripts/run_pipeline.py --stage all
 
 Use `--stage all-with-downloads` to include external downloads, or run a named
 stage such as `spatial`, `features`, `model-tables`, `modeling`, or `checks`.
+
+Plotting is grouped separately:
+
+```bash
+python scripts/plots/plot_all_maps.py --group context
+python scripts/plots/plot_all_maps.py --group predictions
+python scripts/plots/plot_all_maps.py --group seascapes
+python scripts/plots/plot_all_maps.py --group weekly
+```
+
+Use `--list` before running a group to inspect the exact commands.
 
 ## Credentials
 
@@ -120,9 +134,14 @@ See `docs/authentication.md` for details.
 ## Publishing Status
 
 This repository is mid-refactor for public release. The current checklist is in
-`docs/publishing_checklist.md`.
+`docs/publishing_checklist.md`. The visualization scripts are functional but
+will need a careful second-pass refactor after the release-critical cleanup.
 
 ## Citation
 
-Citation metadata are provided in `CITATION.cff`. A Zenodo DOI will be added
-when the first public release/archive is created.
+Citation metadata are provided in `CITATION.cff`. A repository/software DOI
+will be added after the public repository release is published.
+
+The associated Zenodo data bundle is available at:
+
+<https://doi.org/10.5281/zenodo.20334807>

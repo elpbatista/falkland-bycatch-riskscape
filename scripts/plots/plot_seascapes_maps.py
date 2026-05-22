@@ -42,7 +42,7 @@ from riskscape.visualization.base_map import (
 
 YEAR = 2022
 MODEL_NAME = "som_15x15_hierarchical_k30"
-INPUT_ROOT = paths["data"] / "modeling" / "seascapes"
+DEFAULT_ASSIGNMENT_TABLE = "environmental_regimes"
 OUTPUT_ROOT = paths["plots"] / "seascapes"
 CLASS_COLUMN = "seascape"
 SCORE_COLUMN = "seascape_distance"
@@ -120,23 +120,16 @@ def draw_seascape_colorbar(fig: Any, cax: Axes, seascapes: list[int]) -> None:
         cast(Any, cbar.solids).set_edgecolor("face")
 
 
-def seascape_path(year: int, model_name: str) -> Path:
-    """Return seascape assignment partition path for one year."""
-    return INPUT_ROOT / model_name / f"year={year}" / "part.parquet"
-
-
 def assignment_path(year: int, model_name: str, assignment_table: str | None) -> Path:
     """Return seascape assignment partition path for one year."""
-    if assignment_table:
-        return (
-            paths["data"]
-            / "modeling"
-            / assignment_table
-            / f"year={year}"
-            / "part.parquet"
-        )
-
-    return seascape_path(year, model_name)
+    table = assignment_table or DEFAULT_ASSIGNMENT_TABLE
+    return (
+        paths["data"]
+        / "modeling"
+        / table
+        / f"year={year}"
+        / "part.parquet"
+    )
 
 
 def quote_identifier(name: str) -> str:
@@ -361,7 +354,7 @@ def parse_args() -> argparse.Namespace:
         "--assignment-table",
         help=(
             "Modeling table containing yearly seascape assignments. "
-            "Defaults to seascapes/<model-name>."
+            f"Defaults to {DEFAULT_ASSIGNMENT_TABLE}."
         ),
     )
     parser.add_argument("--class-column", default=CLASS_COLUMN)

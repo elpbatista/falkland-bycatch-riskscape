@@ -49,7 +49,7 @@ DEFAULT_BLOCK_RESOLUTION = 4
 DEFAULT_BUFFER_RINGS = 1
 DEFAULT_CV_FOLDS = 5
 DEFAULT_ENVIRONMENTAL_REGIME_TABLE = "environmental_regimes"
-DEFAULT_SEASCAPE_TABLE = "seascapes/som_15x15_hierarchical_k30"
+DEFAULT_SEASCAPE_TABLE = "environmental_regimes"
 DEFAULT_SEASCAPE_COLUMN = "seascape"
 DEFAULT_COMPONENT_TABLE = DEFAULT_ENVIRONMENTAL_REGIME_TABLE
 
@@ -164,7 +164,14 @@ def add_gmm_components(df: pd.DataFrame, component_table: str) -> pd.DataFrame:
 
     if out["component"].isna().any():
         missing = int(out["component"].isna().sum())
-        raise ValueError(f"Missing GMM component labels for {missing:,} rows")
+        print(
+            "Dropping species-training rows without GMM component labels: "
+            f"{missing:,}"
+        )
+        out = out.dropna(subset=["component"]).copy()
+
+    if out.empty:
+        raise ValueError("No species-training rows have GMM component labels")
 
     out["_block_group"] = "component_" + out["component"].astype("int16").astype(str)
     return out.drop(columns=["component"])
@@ -194,7 +201,14 @@ def add_seascapes(
 
     if out["seascape"].isna().any():
         missing = int(out["seascape"].isna().sum())
-        raise ValueError(f"Missing seascape labels for {missing:,} rows")
+        print(
+            "Dropping species-training rows without seascape labels: "
+            f"{missing:,}"
+        )
+        out = out.dropna(subset=["seascape"]).copy()
+
+    if out.empty:
+        raise ValueError("No species-training rows have seascape labels")
 
     out["_block_group"] = "seascape_" + out["seascape"].astype("int16").astype(str)
     return out.drop(columns=["seascape"])

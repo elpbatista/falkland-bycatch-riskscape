@@ -414,6 +414,6 @@ def build_model_datasets() -> None:
 
     # Feature cubes are intentionally not materialized; reuse feature_grid and
     # expand species in memory with build_feature_cube when needed.
-    # build_species_training(static)
+    build_species_training(static)
     # build_prediction_grid(static)
-    # build_fishing_training(static)
+    build_fishing_training(static)

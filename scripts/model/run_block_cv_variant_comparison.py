@@ -47,7 +47,7 @@ class Variant:
     block_resolution: int = 4
     buffer_rings: int = 1
     seascape_table: str = "environmental_regimes"
-    seascape_column: str = "kmeans_k15"
+    seascape_column: str = "seascape"
     component_table: str = "environmental_regimes"
 
     @property
@@ -86,59 +86,14 @@ VARIANTS: dict[str, Variant] = {
         cv_folds=5,
         description="Bayesian/Gaussian mixture environmental-component grouped 5-fold CV.",
     ),
-    "kmeans_k15": Variant(
-        name="kmeans_k15",
-        split="environmental_seascape",
-        description="Selected K=15 environmental seascape holdout.",
-    ),
-    "kmeans_k15_5fold": Variant(
-        name="kmeans_k15_5fold",
-        split="environmental_seascape",
-        cv_folds=5,
-        description="Selected K=15 environmental seascape grouped 5-fold CV.",
-    ),
-    "som_k15": Variant(
-        name="som_k15",
-        split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k15",
-        seascape_column="seascape",
-        description="SOM-hierarchical K=15 environmental seascape holdout.",
-    ),
-    "som_k18": Variant(
-        name="som_k18",
-        split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k18",
-        seascape_column="seascape",
-        description="SOM-hierarchical K=18 environmental seascape holdout.",
-    ),
     "som_k30": Variant(
         name="som_k30",
         split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k30",
-        seascape_column="seascape",
         description="SOM-hierarchical K=30 environmental seascape holdout.",
-    ),
-    "som_k15_5fold": Variant(
-        name="som_k15_5fold",
-        split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k15",
-        seascape_column="seascape",
-        cv_folds=5,
-        description="SOM-hierarchical K=15 environmental seascape grouped 5-fold CV.",
-    ),
-    "som_k18_5fold": Variant(
-        name="som_k18_5fold",
-        split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k18",
-        seascape_column="seascape",
-        cv_folds=5,
-        description="SOM-hierarchical K=18 environmental seascape grouped 5-fold CV.",
     ),
     "som_k30_5fold": Variant(
         name="som_k30_5fold",
         split="environmental_seascape",
-        seascape_table="seascapes/som_15x15_hierarchical_k30",
-        seascape_column="seascape",
         cv_folds=5,
         description="SOM-hierarchical K=30 environmental seascape grouped 5-fold CV.",
     ),
@@ -147,16 +102,9 @@ VARIANTS: dict[str, Variant] = {
 VARIANT_GROUPS: dict[str, tuple[str, ...]] = {
     "selected": ("som_k30_5fold",),
     "core": ("random12", "spatial_h3r4", "gmm_k30", "som_k30_5fold"),
-    "som": ("som_k15", "som_k18", "som_k30"),
-    "som_5fold": ("som_k15_5fold", "som_k18_5fold", "som_k30_5fold"),
-    "som_all": (
-        "som_k15",
-        "som_k18",
-        "som_k30",
-        "som_k15_5fold",
-        "som_k18_5fold",
-        "som_k30_5fold",
-    ),
+    "som": ("som_k30",),
+    "som_5fold": ("som_k30_5fold",),
+    "som_all": ("som_k30", "som_k30_5fold"),
     "all": tuple(VARIANTS),
 }
 

@@ -322,7 +322,7 @@ def monthly_matrix_figure_path(
 
 def seascape_assignment_column(model_name: str) -> str:
     """Return class column name for one seascape assignment table."""
-    return "kmeans_k15" if model_name == "kmeans_k15" else "seascape"
+    return "seascape"
 
 
 def seascape_species_values(model_name: str, year: int) -> dict[str, np.ndarray]:
