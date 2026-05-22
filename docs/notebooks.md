@@ -43,7 +43,7 @@ files.
   latent-risk climatology, fisheries-grid aggregation, gear-aware examples,
   vessel-activity overlays, and animation-oriented outputs as operational
   planning and communication products.
-- `inspection` `notebooks/07_quality_checks_and_diagnostics.ipynb`: Summarizes
+- `inspection` `notebooks/07_quality_checks.ipynb`: Summarizes
   QA checks, validation diagnostics, known limitations, and diagnostic script
   entry points.
 
