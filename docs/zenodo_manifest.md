@@ -4,7 +4,7 @@ This page records the current decision about which local products are useful
 enough to upload to Zenodo alongside a repository release.
 
 Zenodo DOI:
-<https://doi.org/10.5281/zenodo.20334807>
+<https://doi.org/10.5281/zenodo.20334806>
 
 It is a working manifest, not a final upload receipt. Update it after the
 archive is finalized with the version and exact file names.

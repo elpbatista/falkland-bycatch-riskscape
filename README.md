@@ -43,7 +43,7 @@ python scripts/data/download_reference_data.py
 Larger release bundles for derived data, selected plots, and model outputs are
 archived externally on Zenodo:
 
-<https://doi.org/10.5281/zenodo.20334807>
+<https://doi.org/10.5281/zenodo.20334806>
 
 Some source datasets may require provider credentials, access approval, or
 collaborator permission. See `docs/datasets.md` and `docs/authentication.md`.
@@ -144,4 +144,4 @@ will be added after the public repository release is published.
 
 The associated Zenodo data bundle is available at:
 
-<https://doi.org/10.5281/zenodo.20334807>
+<https://doi.org/10.5281/zenodo.20334806>
