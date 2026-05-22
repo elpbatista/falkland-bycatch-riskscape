@@ -1,6 +1,6 @@
 # Falkland Bycatch Riskscape Workflow
 
-[![DOI](https://zenodo.org/badge/1146981351.svg)](https://doi.org/10.5281/zenodo.20348905)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20348906.svg)](https://doi.org/10.5281/zenodo.20348906)
 
 Reusable workflow components for building dynamic bycatch riskscapes from
 species observations, fishing effort, environmental data, and spatial reference
