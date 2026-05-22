@@ -148,8 +148,9 @@ will need a careful second-pass refactor after the release-critical cleanup.
 
 ## Citation
 
-Citation metadata are provided in `CITATION.cff`. A repository/software DOI
-will be added after the public repository release is published.
+Citation metadata are provided in `CITATION.cff`. The repository/software DOI is:
+
+<https://doi.org/10.5281/zenodo.20348906>
 
 The associated Zenodo data bundle has a concept DOI for the latest version:
 
