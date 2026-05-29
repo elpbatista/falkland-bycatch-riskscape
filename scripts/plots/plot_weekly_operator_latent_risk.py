@@ -64,7 +64,7 @@ START_YEAR = 2014
 END_YEAR = 2023
 SEQUENCE_YEAR = 2022
 SPECIES = ("BBAL", "SAFS")
-REPRESENTATIVE_WEEKS = (3, 24, 36, 50)
+REPRESENTATIVE_WEEKS = (12, 24, 36, 48)
 OUTPUT_ROOT = paths["plots"] / "predictions" / "weekly_operator"
 
 
