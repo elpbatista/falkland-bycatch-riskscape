@@ -406,6 +406,9 @@ def color_norm(
             raise ValueError("Log color scale requires positive values")
         return colors.LogNorm(vmin=positive.min(), vmax=vmax)
 
+    if style.color_scale == "sqrt":
+        return colors.PowerNorm(gamma=0.5, vmin=vmin, vmax=vmax)
+
     if style.color_scale != "linear":
         raise ValueError(f"Unknown color scale: {style.color_scale}")
 
