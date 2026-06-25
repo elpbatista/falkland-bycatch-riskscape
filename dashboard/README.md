@@ -2,7 +2,7 @@
 
 Static MapLibre dashboard prototype for the 2022 latent plausible risk surfaces.
 
-Run it from the repository root so the dashboard can fetch files under `data/`:
+Run it from the repository root:
 
 ```bash
 python3 -m http.server 8765
@@ -18,11 +18,11 @@ The dashboard uses:
 
 - Esri Ocean Basemap XYZ tiles for the bathymetry/ocean background:
   `https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}`.
-- `dashboard/data/falkland_islands_land.geojson` for Falkland Islands land polygons.
+- `data/falkland_islands_land.geojson` for Falkland Islands land polygons.
 - `data/grids/h3_res6_falkland_islands.geojson` for H3 geometry.
-- `data/plot_exports/dashboard/risk_weekly_csv/BBAL_w01.csv` through
+- `data/risk_weekly_csv/BBAL_w01.csv` through
   `BBAL_w52.csv` for BBAL weekly risk inputs.
-- `data/plot_exports/dashboard/risk_weekly_csv/SAFS_w01.csv` through
+- `data/risk_weekly_csv/SAFS_w01.csv` through
   `SAFS_w52.csv` for SAFS weekly risk inputs.
 
 Regenerate the 52-week CSV set with:

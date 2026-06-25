@@ -10,9 +10,9 @@ const STUDY_BOUNDS = [
   [-50.2, -46.5],
 ];
 const DATA_PATHS = {
-  grid: "../data/grids/h3_res6_falkland_islands.geojson",
-  land: "./data/falkland_islands_land.geojson",
-  riskCsvRoot: "../data/plot_exports/dashboard/risk_weekly_csv",
+  grid: "data/grids/h3_res6_falkland_islands.geojson",
+  land: "data/falkland_islands_land.geojson",
+  riskCsvRoot: "data/risk_weekly_csv",
   oceanTiles:
     "https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
 };
