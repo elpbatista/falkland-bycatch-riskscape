@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Falkland Bycatch Riskscape Dashboard</title>
+    <link
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <link href="./styles.css" rel="stylesheet" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="controls" aria-label="Dashboard controls">
+        <div class="brand">
+          <h1>Bycatch</h1>
+          <p class="eyebrow">Latent plausible risk</p>
+        </div>
+
+        <fieldset class="field species-field" id="species">
+          <legend>Species</legend>
+          <label class="species-option">
+            <input type="radio" name="species" value="BBAL" checked />
+            <span>BBAL</span>
+          </label>
+          <label class="species-option">
+            <input type="radio" name="species" value="SAFS" />
+            <span>SAFS</span>
+          </label>
+        </fieldset>
+
+        <label class="field">
+          <span>ISO week <output id="week-value">Week 48</output></span>
+          <div class="week-control">
+            <button id="previous-week" type="button" aria-label="Previous week">‹</button>
+            <input id="week" type="range" min="0" max="51" step="1" value="47" aria-label="ISO week" />
+            <button id="next-week" type="button" aria-label="Next week">›</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Plausibility threshold <output id="threshold-value">0.01</output></span>
+          <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.01" />
+        </label>
+
+        <label class="field">
+          <span>Gate strength <output id="gate-value">0.10</output></span>
+          <input id="gate" type="range" min="0" max="1" step="0.01" value="0.10" />
+        </label>
+
+        <div class="summary" aria-live="polite">
+          <dl>
+            <div class="summary-block">
+              <dt>Cells by class</dt>
+              <dd class="class-shares">
+                <span class="class-share class-low">Low <strong id="class-low">-</strong></span>
+                <span class="class-share class-mod">Mod <strong id="class-mod">-</strong></span>
+                <span class="class-share class-high">High <strong id="class-high">-</strong></span>
+                <span class="class-share class-xtrm">Xtrm <strong id="class-xtrm">-</strong></span>
+              </dd>
+            </div>
+            <div class="summary-inline">
+              <dt>Low-plausibility share</dt>
+              <dd id="low-plausibility-share">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <p id="status" class="status">Loading dashboard data...</p>
+      </aside>
+
+      <section class="map-panel" aria-label="Risk map">
+        <div id="map"></div>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
