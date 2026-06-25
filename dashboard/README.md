@@ -31,6 +31,29 @@ Regenerate the 52-week CSV set with:
 python3 scripts/dashboard/export_weekly_risk_csv.py
 ```
 
+Build the publishable static site with:
+
+```bash
+python3 scripts/dashboard/build_static_dashboard.py
+```
+
+The build writes `dashboard/dist/`, including only the dashboard files and the
+data required by the browser. Preview the built site from the repository root:
+
+```bash
+python3 -m http.server 8765
+```
+
+Then open:
+
+```text
+http://localhost:8765/dashboard/dist/
+```
+
+GitHub Pages deployment is configured in
+`.github/workflows/dashboard-pages.yml`. The workflow publishes `dashboard/dist/`,
+so rebuild and commit that folder before pushing to `main`.
+
 Risk is computed in the browser as:
 
 ```text
